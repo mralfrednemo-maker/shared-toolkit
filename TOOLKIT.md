@@ -1,7 +1,7 @@
-# Shared Toolkit — Mitso, Deus & Claude Code
+# Shared Toolkit — Mitso, Deus, Gemini, Codex & Claude Code
 **Location:** `C:\Users\chris\PROJECTS\shared\TOOLKIT.md` — canonical, single source of truth
-**Last updated:** 2026-04-09
-**Maintained by:** ALL agents (Mitso, Deus, Claude Code). Any agent that discovers or adds a new tool updates this file immediately, then runs `qmd update shared && qmd embed shared`.
+**Last updated:** 2026-04-10
+**Maintained by:** ALL agents. Any agent that discovers or adds a new tool updates this file immediately, then runs `qmd update shared && qmd embed shared`.
 
 ---
 
@@ -11,12 +11,52 @@
 Question or research task?
 ├── Already have context? → QMD first (qmd vsearch)
 ├── Need current web data? → WebSearch → Bing → Sonar (escalate as needed)
-├── Need a second opinion / debate? → kk (ChatGPT) or jj (Gemini)
-├── Need deep comprehensive research? → jj dr OR cc research
-├── Need 3 LLMs to reach a decision together? → Ein Deliberation (**NOT manual kk+jj+cc**)
-├── Need 3 LLMs to co-write a document/spec? → Ein Design (**NOT manual kk+jj+cc**)
+├── Need a second opinion / debate? → cg (ChatGPT) or gg (Gemini)
+├── Need deep comprehensive research? → gg dr OR cc research
+├── Need 3 LLMs to reach a decision together? → Ein Deliberation (**NOT manual cg+gg+cc**)
+├── Need 3 LLMs to co-write a document/spec? → Ein Design (**NOT manual cg+gg+cc**)
 └── Need to implement code? → cx (Codex)
 ```
+
+---
+
+## PARALLEL EXECUTION — What Can Run Simultaneously?
+
+Each browser tool (`cg`, `gg`, `cc`) runs in its **own independent browser process with its own profile**. They do not share anything. This means:
+
+| Combination | Parallel? | Notes |
+|-------------|-----------|-------|
+| `cg` + `gg` | ✅ Yes | ChatGPT + Gemini — separate browsers |
+| `gg dr` + `cc research` | ✅ Yes | Both are heavyweight (~10–30 min) — launch together |
+| `cg` + `gg` + `cc` | ✅ Yes | All three simultaneously — fully independent |
+| `cg` + `cg` | ❌ No | Same ChatGPT browser/thread — use `cg new` for a second topic only after the first finishes |
+| `gg` + `gg` | ❌ No | Same Gemini thread |
+| `cx` + anything | ✅ Yes | Codex is CLI-only, no browser — always parallel-safe |
+
+> **One-at-a-time rule applies only during troubleshooting/setup.** If a browser tool is broken and you're debugging it, fix one at a time to isolate the issue. Once all tools are confirmed working, parallel runs are the default.
+
+## SAFETY — Rate Limiting & No-Retry Rule
+
+All browser/pipeline scripts are protected by `browser_safety.py` (`the-thinker/browser-automation/`):
+
+| Tool | Cooldown | Hourly cap | Daily cap | Lock scope |
+|------|----------|------------|-----------|------------|
+| `cg` (ChatGPT) | 5s | 30/hour | 200/day | ChatGPT profile |
+| `gg` (Gemini) | 5s | 30/hour | 200/day | Gemini profile |
+| `cc` (Claude web) | 5s | 30/hour | 200/day | Claude profile |
+| `gg dr` (Gemini DR) | 120s | 3/hour | 10/day | Gemini profile |
+| ChatGPT DR | 120s | 3/hour | 10/day | ChatGPT profile |
+| `cc research` | 60s | 5/hour | 20/day | Claude profile |
+| Bing search (`mitso-search.py`) | 5s | 30/hour | 200/day | Playwright |
+| Sonar Pro (`--deep`) | 30s | 10/hour | 50/day | Playwright |
+| Ein MDP (`watchdog.py`) | 300s | 3/hour | 10/day | Ein pipeline |
+| Ein Design (`ein-design.py`) | 300s | 3/hour | 10/day | Ein pipeline |
+
+**Rules:**
+- **NEVER retry a failed call more than once.** If it exits non-zero or prints `[SAFETY]`, report the error and STOP.
+- Per-profile singleton locks prevent concurrent scripts sharing the same browser profile.
+- All scripts exit with code 1 on failure (not 0) so the caller knows to stop.
+- `--no-rate-limit` flag exists on all scripts for manual emergency override. Never use it programmatically.
 
 ---
 
@@ -137,41 +177,41 @@ python3 mitso-search.py "what is the current state of epigenetic reprogramming i
 
 ## TIER 3 — AI Conversations (minutes, back-and-forth)
 
-### ChatGPT — `kk`
+### ChatGPT — `cg`
 **What it does:** Sends prompt to ChatGPT in the browser, continues same thread. Returns response. Best for debate, idea testing, pushback, synthesis.
 
 **Commands:**
 ```bash
-kk <prompt>              # Continue current thread
-kk new <prompt>          # Start fresh thread (new topic only)
+cg <prompt>              # Continue current thread
+cg new <prompt>          # Start fresh thread (new topic only)
 ```
 
 **Examples:**
 ```bash
-kk "What are the strongest objections to partial epigenetic reprogramming?"
-kk new "Completely different topic: explain the Hayflick limit"
+cg "What are the strongest objections to partial epigenetic reprogramming?"
+cg new "Completely different topic: explain the Hayflick limit"
 ```
 
 **Rules:**
-- NEVER use `kk new` mid-topic — kills all context
+- NEVER use `cg new` mid-topic — kills all context
 - Always push back on ChatGPT's answers — don't just accept them
 - Good for adversarial review and stress-testing ideas
 
 ---
 
-### Gemini — `jj`
+### Gemini — `gg`
 **What it does:** Sends prompt to Gemini Pro in the browser, continues same thread. Good for second opinions, cross-checking, and broad synthesis.
 
 **Commands:**
 ```bash
-jj <prompt>              # Continue current thread
-jj new <prompt>          # Start fresh thread
+gg <prompt>              # Continue current thread
+gg new <prompt>          # Start fresh thread
 ```
 
 **Examples:**
 ```bash
-jj "Cross-check: is this interpretation of the Yang 2023 paper correct?"
-jj new "New topic: what are the latest findings on NAD+ and aging?"
+gg "Cross-check: is this interpretation of the Yang 2023 paper correct?"
+gg new "New topic: what are the latest findings on NAD+ and aging?"
 ```
 
 **Rule:** Same thread continues automatically. Fresh thread only for genuinely unrelated topics.
@@ -215,18 +255,18 @@ cc research "What are the latest clinical trial results for dasatinib + querceti
 
 ## TIER 4 — Deep Research (10–30 min, comprehensive)
 
-### Gemini Deep Research — `jj dr`
+### Gemini Deep Research — `gg dr`
 **What it does:** Gemini's full deep research mode. Visits 100+ websites, synthesizes into a comprehensive report. Takes 10–30 minutes.
 
 **Commands:**
 ```bash
-jj dr <prompt>           # Continue thread
-jj dr new <prompt>       # Fresh thread
+gg dr <prompt>           # Continue thread
+gg dr new <prompt>       # Fresh thread
 ```
 
 **Example:**
 ```bash
-jj dr "Comprehensive review of senolytics mechanisms, clinical evidence, and safety profile as of 2025"
+gg dr "Comprehensive review of senolytics mechanisms, clinical evidence, and safety profile as of 2025"
 ```
 
 **Quota:** ≤10/day. Use when WebSearch + Bing are insufficient for complex multi-source questions.
@@ -248,7 +288,7 @@ python.exe "C:/Users/chris/PROJECTS/the-thinker/browser-automation/test_chatgpt_
 ## TIER 5 — Multi-LLM Pipelines (the heavy artillery)
 
 > **RULE: Never manually orchestrate multiple LLMs yourself.**
-> Never call `kk`, `jj`, `cc` one by one, collect responses, and summarize them yourself. That is not facilitation — that is you doing the work that Ein exists to do, worse and slower. Use the right pipeline below.
+> Never call `cg`, `gg`, `cc` one by one, collect responses, and summarize them yourself. That is not facilitation — that is you doing the work that Ein exists to do, worse and slower. Use the right pipeline below.
 
 ### WHICH PIPELINE TO USE?
 
@@ -370,36 +410,41 @@ python ein-selenium.py --phase 1 --only gemini
 
 **Pipeline:**
 ```
-draft → cross_1 → cross_2 → [cross_3] → [cross_4] → final
+draft → cross_1 → cross_2 → cross_3 → final
 ```
 1. **Draft** — 3 LLMs write independently from the same brief
 2. **Cross_1** — each reads the other two's drafts and revises
 3. **Cross_2** — same with cross_1 outputs
-4. **Cross_3 / Cross_4** — only if significant divergence remains (cross_4 = forced concession)
+4. **Cross_3** — runs by default; final convergence pass before assembly
 5. **Final** — ChatGPT synthesizes with 2/3 majority on remaining disagreements
+
+**`--phase` controls how far to run.** Default (no flag) = all phases through final. Passing `--phase X` stops after phase X.
 
 **Command:**
 ```bash
 cd C:\Users\chris\PROJECTS\the-thinker\ein
 
-# Phase 1: Draft (all 3 engines write independently)
+# Full run (default) — draft → cross_1 → cross_2 → cross_3 → final
 python ein-design.py \
-  --phase draft \
   --prompt C:\path\to\brief.txt \
   --upload-files "file1.md,file2.md"
 
-# Subsequent phases: resume from ledger
-python ein-design.py --phase cross_1 --resume C:\Users\chris\PROJECTS\design-ledger-YYYYMMDD-HHMMSS.json
-python ein-design.py --phase cross_2 --resume <ledger>
-python ein-design.py --phase final   --resume <ledger>
+# Stop after cross_2 (skip cross_3 and final)
+python ein-design.py \
+  --phase cross_2 \
+  --prompt C:\path\to\brief.txt \
+  --upload-files "file1.md,file2.md"
+
+# Resume from a saved ledger
+python ein-design.py --resume C:\Users\chris\PROJECTS\design-ledger-YYYYMMDD-HHMMSS.json
 ```
 
 **Key arguments:**
 | Argument | Default | Purpose |
 |---|---|---|
-| `--phase` | required | `draft`, `cross_1`, `cross_2`, `cross_3`, `cross_4`, `final` |
+| `--phase` | `final` (all) | Stop after this phase: `draft`, `cross_1`, `cross_2`, `cross_3`, `final` |
 | `--prompt` | `phase1-v5-prompt.txt` | Path to the brief/prompt file |
-| `--resume` | — | Ledger JSON from a previous phase (required for cross/final phases) |
+| `--resume` | — | Ledger JSON from a previous run — skips draft, navigates back to existing threads |
 | `--upload-files` | — | Comma-separated source files to upload to each engine |
 | `--quality-criterion` | "more thorough, better reasoned, and more actionable" | What "stronger" means during cross-pollination |
 | `--kill-stale` | off | Kill orphaned Chrome processes |
@@ -407,23 +452,17 @@ python ein-design.py --phase final   --resume <ledger>
 
 **Examples:**
 ```bash
-# Synthesize 3 research papers into one summary
+# Synthesize 3 research papers into one summary (full run)
 python ein-design.py \
-  --phase draft \
   --prompt deus/research/synthesis-brief.txt \
   --upload-files "deus/research/paper1.md,deus/research/paper2.md,deus/research/paper3.md"
 
-# Continue from where you left off
-python ein-design.py --phase cross_1 --resume design-ledger-20260409-143022.json
+# Stop early at cross_2
+python ein-design.py --phase cross_2 --prompt brief.txt --upload-files "file1.md"
 
-# Test with one engine
+# Test with one engine (draft only)
 python ein-design.py --phase draft --prompt brief.txt --only chatgpt
 ```
-
-**When to stop cross-pollination:**
-- After cross_2: if all topics have 2/3 majority → go to `final`
-- If 2+ topics still split → run `cross_3`
-- If cross_3 still has splits → run `cross_4` (forced concession)
 
 **Location:** `C:\Users\chris\PROJECTS\the-thinker\ein\`
 
@@ -461,7 +500,7 @@ cx ro "Investigate why the Bing scraper is returning empty results"
 
 **How:** `Agent tool, subagent_type: context-compiler`
 
-**Example use:** Before starting a `jj dr` deep research session, run context compiler to pull all existing knowledge on the topic so the brief includes what we already know.
+**Example use:** Before starting a `gg dr` deep research session, run context compiler to pull all existing knowledge on the topic so the brief includes what we already know.
 
 ---
 
