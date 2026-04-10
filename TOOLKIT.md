@@ -27,20 +27,34 @@ Question or research task?
 
 **Commands:**
 ```bash
-# If qmd is on your PATH (Claude Code sessions):
+# Claude Code sessions (qmd on PATH):
 qmd vsearch "topic"          # Semantic vector search (recommended, ~4s — model cold load)
 qmd search "keywords"        # BM25 keyword search (instant, ~1s)
 qmd query "topic"            # Hybrid search with LLM expansion (best quality, slower)
 
-# Full path (use in Codex, or if qmd is not on PATH):
-node "C:/Users/chris/AppData/Roaming/npm/node_modules/@tobilu/qmd/dist/cli/qmd.js" vsearch "topic" -n 3
-node "C:/Users/chris/AppData/Roaming/npm/node_modules/@tobilu/qmd/dist/cli/qmd.js" search "keywords" -n 5
+# Codex / WSL / sandboxed shells — ALWAYS use the wrapper:
+node "C:/Users/chris/PROJECTS/qmd-wrap.mjs" vsearch "topic" -n 3
+node "C:/Users/chris/PROJECTS/qmd-wrap.mjs" search "keywords" -n 5
+node "C:/Users/chris/PROJECTS/qmd-wrap.mjs" status
+
+# Bootstrap for fresh Codex sessions:
+powershell -ExecutionPolicy Bypass -File "C:/Users/chris/PROJECTS/codex-bootstrap.ps1"
 ```
+
+> **⚠ Codex / sandboxed environments:** the wrapper `qmd-wrap.mjs` is
+> MANDATORY. If you call `qmd.js` directly, QMD lands on an empty
+> `/tmp/.cache/qmd/index.sqlite` because your shell's `HOME` is not the
+> real Windows profile — you'll see "No results found" on every search
+> and QMD will start re-downloading the 328MB embedding model into the
+> wrong folder. The wrapper pins `INDEX_PATH`, `XDG_CACHE_HOME`, and
+> `XDG_CONFIG_HOME` to `C:/Users/chris/.cache` and `C:/Users/chris/.config`
+> so Codex sees the real 20MB index with all 810 indexed files and 8
+> collections. Diagnosed 2026-04-09.
 
 **Examples:**
 ```bash
-node "C:/Users/chris/AppData/Roaming/npm/node_modules/@tobilu/qmd/dist/cli/qmd.js" vsearch "telomere shelterin complex" -n 3
-node "C:/Users/chris/AppData/Roaming/npm/node_modules/@tobilu/qmd/dist/cli/qmd.js" search "OpenClaw agent memory silo" -n 5
+node "C:/Users/chris/PROJECTS/qmd-wrap.mjs" vsearch "telomere shelterin complex" -n 3
+node "C:/Users/chris/PROJECTS/qmd-wrap.mjs" search "OpenClaw agent memory silo" -n 5
 qmd vsearch "what do we know about senolytics"   # Claude Code shorthand
 ```
 
@@ -64,19 +78,41 @@ qmd vsearch "what do we know about senolytics"   # Claude Code shorthand
 ---
 
 ### Bing Headful Search — `mitso-search.py`
-**What it does:** Headful Playwright browser hitting Bing.com. Returns 10 real results with URLs and snippets. **Must be headful** — Bing fingerprints headless browsers and returns garbage.
+**What it does:** Headful Playwright browser hitting Bing.com. Returns 10 real results with decoded URLs, snippets, and optionally full page content. **Must be headful** — Bing fingerprints headless browsers and returns garbage.
 
-**Command:**
+**Commands:**
 ```bash
+# Standard — URLs + snippets only
 python3 C:\Users\chris\PROJECTS\mitso-search.py "your query"
+
+# Fetch mode — URLs + snippets + full content of top N pages (default N=3)
+python3 C:\Users\chris\PROJECTS\mitso-search.py "your query" --fetch
+python3 C:\Users\chris\PROJECTS\mitso-search.py "your query" --fetch 5
+
+# Deep mode — Bing + Sonar Pro synthesis (paid)
+python3 C:\Users\chris\PROJECTS\mitso-search.py "your query" --deep
+
+# Combined — fetch + deep
+python3 C:\Users\chris\PROJECTS\mitso-search.py "your query" --fetch --deep
 ```
 
-**Example:**
+**Examples:**
 ```bash
 python3 mitso-search.py "rapamycin longevity human trials 2025"
+python3 mitso-search.py "senolytics dasatinib quercetin 2025 results" --fetch 3
+python3 mitso-search.py "epigenetic reprogramming safety 2025" --fetch --deep
 ```
 
-**When to use:** Run in parallel with WebSearch for a broader result set. Free. Use before escalating to paid tools.
+**How `--fetch` works:**
+1. Bing search returns top 10 results with real decoded URLs (Bing tracking URLs are automatically decoded)
+2. `--fetch N` selects the top N results and fetches up to 4000 chars of full page content from each
+3. Paywalled sites (Lancet, Nature, Cell) will return 403 — expected. Open-access sources (PMC, preprints, longevity blogs) fetch cleanly.
+4. Content is stripped of HTML tags and returned as plain text
+
+**When to use:**
+- Standard: quick scan to see what's out there
+- `--fetch`: when you need actual content, not just links — use for open-access sources
+- `--deep`: when you need synthesis across sources (paid Sonar Pro)
 
 ---
 
