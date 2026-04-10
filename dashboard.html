@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEUS — Immortality Research Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2234;
+    --border: #1e2d45;
+    --accent: #3b82f6;
+    --accent2: #8b5cf6;
+    --accent3: #10b981;
+    --accent4: #f59e0b;
+    --accent5: #ef4444;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(135deg, #0a0e1a 0%, #0f172a 50%, #0a0e1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 32px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -10%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-top { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+  .deus-badge {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #e2e8f0 0%, #93c5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header .mission {
+    color: var(--text2);
+    font-size: 15px;
+    max-width: 700px;
+  }
+  .header .mission span { color: var(--accent); font-weight: 600; }
+  .updated { color: var(--text3); font-size: 12px; margin-top: 8px; }
+
+  /* LAYOUT */
+  .container { max-width: 1400px; margin: 0 auto; padding: 32px 40px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .section { margin-bottom: 40px; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card.accent-blue { border-left: 3px solid var(--accent); }
+  .card.accent-purple { border-left: 3px solid var(--accent2); }
+  .card.accent-green { border-left: 3px solid var(--accent3); }
+  .card.accent-amber { border-left: 3px solid var(--accent4); }
+  .card.accent-red { border-left: 3px solid var(--accent5); }
+  .card h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .card p { color: var(--text2); font-size: 13px; }
+
+  /* PHASE ROADMAP */
+  .roadmap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 20px;
+  }
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    position: relative;
+  }
+  .phases::before {
+    content: '';
+    position: absolute;
+    top: 28px;
+    left: 10%;
+    right: 10%;
+    height: 2px;
+    background: linear-gradient(to right, var(--accent3), var(--accent), var(--accent2), var(--text3), var(--text3));
+    z-index: 0;
+  }
+  .phase-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    z-index: 1;
+    padding: 0 8px;
+  }
+  .phase-dot {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    border: 2px solid transparent;
+    position: relative;
+  }
+  .phase-dot.done {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+  }
+  .phase-dot.current {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    box-shadow: 0 0 20px rgba(59,130,246,0.4);
+    animation: pulse 2s infinite;
+  }
+  .phase-dot.pending {
+    background: var(--surface2);
+    border-color: var(--border);
+    color: var(--text3);
+  }
+  .phase-dot.frontier {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: white;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(59,130,246,0.4); }
+    50% { box-shadow: 0 0 30px rgba(59,130,246,0.7); }
+  }
+  .phase-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text2);
+  }
+  .phase-desc {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    line-height: 1.4;
+  }
+  .phase-status {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+  }
+  .status-done { background: rgba(16,185,129,0.15); color: var(--accent3); }
+  .status-active { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .status-next { background: rgba(245,158,11,0.15); color: var(--accent4); }
+  .status-pending { background: rgba(100,116,139,0.1); color: var(--text3); }
+  .status-parallel { background: rgba(139,92,246,0.15); color: var(--accent2); }
+
+  /* HALLMARKS GRID */
+  .hallmarks-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .hallmark-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .hallmark-chip .check { color: var(--accent3); font-size: 14px; }
+  .hallmark-chip span { color: var(--text2); }
+
+  /* CAUSAL CASCADE */
+  .cascade {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 2;
+  }
+  .cascade .label { color: var(--accent4); font-weight: 700; }
+  .cascade .arrow { color: var(--text3); }
+  .cascade .node { color: var(--accent); }
+  .cascade .node2 { color: var(--accent2); }
+  .cascade .node3 { color: var(--accent3); }
+  .cascade .warn { color: var(--accent5); font-style: italic; font-size: 11px; }
+
+  /* RESEARCH FINDINGS */
+  .finding-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .finding-card h4 {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .finding-card h4 .icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+  .finding-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .finding-item .dot { color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+  .finding-item strong { color: var(--text); }
+
+  /* INTERVENTION TIERS */
+  .tier {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 10px;
+  }
+  .tier-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .tier-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    text-transform: uppercase;
+  }
+  .t1 { background: rgba(16,185,129,0.15); color: var(--accent3); }
+  .t2 { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .t3 { background: rgba(100,116,139,0.1); color: var(--text3); }
+  .intervention-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .int-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text2);
+  }
+
+  /* TOOLS */
+  .tool-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tool-row:last-child { border-bottom: none; }
+  .tool-name {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--accent);
+    background: rgba(59,130,246,0.08);
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    min-width: 120px;
+    text-align: center;
+  }
+  .tool-desc { font-size: 12px; color: var(--text2); }
+  .tool-when { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+  /* NEXT STEPS */
+  .next-step {
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    align-items: flex-start;
+  }
+  .step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .step-content h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .step-content p { font-size: 12px; color: var(--text2); }
+
+  /* STATS ROW */
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .stat-card .num {
+    font-size: 36px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+  }
+  .stat-card .label { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+  /* VERDICT BOX */
+  .verdict {
+    background: linear-gradient(135deg, rgba(59,130,246,0.05), rgba(139,92,246,0.05));
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 12px;
+    padding: 20px 24px;
+  }
+  .verdict h3 { font-size: 14px; font-weight: 700; color: var(--accent); margin-bottom: 10px; }
+  .verdict-point {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: var(--text2);
+    align-items: flex-start;
+  }
+  .verdict-point .num { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+  /* RESPONSIVE */
+  @media (max-width: 1100px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .phases { grid-template-columns: 1fr; }
+    .phases::before { display: none; }
+    .hallmarks-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 768px) {
+    .container { padding: 20px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .hallmarks-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="deus-badge">Deus</div>
+    <h1>Immortality Research Program</h1>
+  </div>
+  <div class="mission">Mission: <span>Make humans immortal. Literally stop aging.</span> Not slow it — stop it, then reverse it. The bar is human trials, not mouse papers.</div>
+  <div class="updated">Last updated: 2026-04-10 &nbsp;|&nbsp; Program version: v1.0 post-EinMDP critique &nbsp;|&nbsp; Status: Phase 0 research active</div>
+</div>
+
+<div class="container">
+
+  <!-- STATS -->
+  <div class="section">
+    <div class="grid-4">
+      <div class="stat-card">
+        <div class="num">12</div>
+        <div class="label">Hallmarks deeply synthesized</div>
+      </div>
+      <div class="stat-card">
+        <div class="num">4</div>
+        <div class="label">Program phases + Frontier Track</div>
+      </div>
+      <div class="stat-card">
+        <div class="num">3</div>
+        <div class="label">LLMs ran adversarial critique</div>
+      </div>
+      <div class="stat-card">
+        <div class="num">12yr</div>
+        <div class="label">Est. timeline to first-in-human</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROADMAP -->
+  <div class="section">
+    <div class="section-title">Program Roadmap</div>
+    <div class="roadmap">
+      <div class="phases">
+
+        <div class="phase-item">
+          <div class="phase-dot done">✓</div>
+          <div class="phase-label">Pre-Program</div>
+          <div class="phase-desc">12 hallmarks<br>deep synthesis</div>
+          <div class="phase-status status-done">Complete</div>
+        </div>
+
+        <div class="phase-item">
+          <div class="phase-dot current">0</div>
+          <div class="phase-label">Phase 0</div>
+          <div class="phase-desc">Instrument Build<br>perturbation-measurement loop</div>
+          <div class="phase-status status-active">Active — Research</div>
+        </div>
+
+        <div class="phase-item">
+          <div class="phase-dot pending">1</div>
+          <div class="phase-label">Phase 1</div>
+          <div class="phase-desc">Perturbation Mapping<br>rank aging drivers empirically</div>
+          <div class="phase-status status-next">Next</div>
+        </div>
+
+        <div class="phase-item">
+          <div class="phase-dot pending">2</div>
+          <div class="phase-label">Phase 2</div>
+          <div class="phase-desc">Intervention Dev<br>engineer &amp; safety-test leads</div>
+          <div class="phase-status status-pending">Pending</div>
+        </div>
+
+        <div class="phase-item">
+          <div class="phase-dot pending">3</div>
+          <div class="phase-label">Phase 3</div>
+          <div class="phase-desc">Human Translation<br>first-in-human trials</div>
+          <div class="phase-status status-pending">Pending (~yr 7–12)</div>
+        </div>
+
+      </div>
+
+      <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div class="phase-dot frontier" style="width:40px;height:40px;font-size:11px;">F</div>
+          <div>
+            <div style="font-weight:700; font-size:13px; color: #a78bfa;">Frontier Track — Runs in parallel (Phases 0–3)</div>
+            <div style="font-size:12px; color: var(--text3);">High-risk mechanistic work protected from tractability filtering. 15-20% budget. ECM cross-linking, deep reprogramming, novel driver discovery.</div>
+          </div>
+          <div class="phase-status status-parallel" style="margin-left: auto;">Parallel</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EIN MDP VERDICT -->
+  <div class="section">
+    <div class="section-title">EinMDP Adversarial Critique — Unanimous Verdict (2026-04-10)</div>
+    <div class="verdict">
+      <h3>REPLACE — The original 3-phase plan was a synthesis program, not a research program.</h3>
+      <div class="verdict-point"><span class="num">1.</span> Without a perturbation-measurement loop, every phase is decorative. Understanding ≠ control.</div>
+      <div class="verdict-point"><span class="num">2.</span> Dual-track governance required: Translational Track (safety-gated) + Frontier Track (protected from tractability filtering).</div>
+      <div class="verdict-point"><span class="num">3.</span> Biomarker regime is the most dangerous shared assumption — epigenetic clocks correlate with lifespan but causality is unproven.</div>
+      <div class="verdict-point"><span class="num">4.</span> Mission reframed: "Indefinite Healthspan Extension" — not immortality. "Immortality" destroys milestone logic.</div>
+      <div class="verdict-point"><span class="num">5.</span> ECM cross-linking: real but currently intractable. Placed in Frontier Track, not mainline.</div>
+    </div>
+  </div>
+
+  <!-- PHASE 0 RESEARCH FINDINGS -->
+  <div class="section">
+    <div class="section-title">Phase 0 Research — Fresh Findings (Haiku agents, 2026-04-10)</div>
+    <div class="grid-2">
+
+      <div class="finding-card">
+        <h4><div class="icon" style="background:rgba(59,130,246,0.15);">⏱</div> Biological Age Clocks</h4>
+        <div class="finding-item"><span class="dot">›</span><div><strong>DunedinPACE</strong> — most intervention-responsive clock. Validated in 65+ cohorts. Shows calorie restriction signal.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>GrimAge v2</strong> — strong mortality predictor. Responds in CALERIE trial.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Proteomics clock (204 proteins)</strong> — r=0.94 with age. Predicts 18 diseases. No intervention data yet.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Critical gap:</strong> No clock has demonstrated CAUSAL tracking of lifespan. All are correlates. This is the biomarker mirage problem.</div></div>
+      </div>
+
+      <div class="finding-card">
+        <h4><div class="icon" style="background:rgba(16,185,129,0.15);">🔬</div> Model Systems</h4>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Ex vivo human skin</strong> — 3-7 day signal, high throughput, very high human relevance. Best for rapid screening.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>iPSC-derived organoids</strong> — 2-14 days. High human relevance. Lower throughput. Best for organ-level mechanisms.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Killifish</strong> — 9-18 month lifespan. Whole-organism. Immune senescence mirrors human patterns. 2025: gut FMT from young fish improved health.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Golden hybrid:</strong> Skin biopsies (3-day rapid screen) + iPSC cardiac/neural organoids (mechanism) = 2-4 week total signal.</div></div>
+      </div>
+
+      <div class="finding-card">
+        <h4><div class="icon" style="background:rgba(245,158,11,0.15);">💉</div> Senolytics — Human Trial Status</h4>
+        <div class="finding-item"><span class="dot">›</span><div><strong>D+Q cognition (STAMINA, n=12)</strong> — Safe. MoCA +2.0 pts (exploratory). TNF-α reduction. eBioMedicine 2025.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>D+Q bone health (Mayo, n=60)</strong> — FAILED primary. No sustained bone resorption effect.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>UBX1325 (Unity, n=52)</strong> — Missed non-inferiority at wk 24, achieved at wk 36 vs aflibercept. Eye only.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Bottom line:</strong> Proof of safety. No large RCT shows biological age reduction. Fisetin Phase II pending.</div></div>
+      </div>
+
+      <div class="finding-card">
+        <h4><div class="icon" style="background:rgba(139,92,246,0.15);">🧬</div> Epigenetic Reprogramming</h4>
+        <div class="finding-item"><span class="dot">›</span><div><strong>OSK vs OSKM:</strong> c-Myc dropped due to oncogenesis risk. Cyclic OSK (2 on/5 off) shows zero teratoma over 35 cycles.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Altos Labs 2025:</strong> Selective gene silencing prevents "cellular drift". Engineered factors 50× more effective than natural OSK.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Life Biosciences:</strong> FDA cleared Phase I (AAV-OSK) for vision disorders. First human reprogramming trial.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>Safety horizon:</strong> 5-10 years to human efficacy data. Biggest risk: off-target identity drift in non-target tissues.</div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- HALLMARKS COMPLETED -->
+  <div class="section">
+    <div class="section-title">Pre-Program: 12 Hallmarks Deep Synthesis — Complete</div>
+    <div class="hallmarks-grid">
+      <div class="hallmark-chip"><span class="check">✓</span><span>DNA Damage Response</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>cGAS-STING</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Mitochondrial Quality Control</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Nutrient Sensing (mTOR/AMPK)</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Proteostasis Collapse</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Telomere Dynamics</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Cellular Senescence / SASP</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Inflammaging</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Epigenetic Drift</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Stem Cell Exhaustion</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Intercellular Communication</span></div>
+      <div class="hallmark-chip"><span class="check">✓</span><span>Dysbiosis / Gut Microbiome</span></div>
+    </div>
+  </div>
+
+  <!-- CAUSAL CASCADE -->
+  <div class="section">
+    <div class="section-title">Working Causal Cascade (Hypothesis — Not Settled)</div>
+    <div class="cascade">
+      <div><span class="label">DIVIDING CELLS: </span><span class="node">Replication stress + DSBs → PARP1 → NAD+ depletion → Sirtuin collapse → Heterochromatin loss</span></div>
+      <div><span class="label">POSTMITOTIC CELLS: </span><span class="node">Histone economy failure → Nucleosome loss → Heterochromatin loss</span> <span class="warn">(mammalian evidence thin)</span></div>
+      <div><span class="arrow">         ↓ both converge on</span></div>
+      <div><span class="node2">Heterochromatin loss → LINE-1/ERV derepression → cGAS-STING → NF-κB / IFN response</span></div>
+      <div><span class="arrow">         ↓ parallel emergence (not single-file)</span></div>
+      <div><span class="node">Senescence (p16/p21)</span> &nbsp;+&nbsp; <span class="node">Mitochondrial dysfunction</span> &nbsp;+&nbsp; <span class="node">Proteostasis failure</span></div>
+      <div><span class="arrow">         ↓ amplified via</span></div>
+      <div><span class="node2">SASP exosomes → TLR4 in distant cells → NF-κB elevation systemwide → Inflammaging</span></div>
+      <div><span class="arrow">         ↓ drives</span></div>
+      <div><span class="node3">Stem cell niche distortion + Dysbiosis + LPS translocation + Epigenetic drift propagation</span></div>
+    </div>
+    <div style="margin-top: 8px; font-size: 11px; color: var(--accent5); padding: 8px 12px; background: rgba(239,68,68,0.05); border-radius: 6px; border: 1px solid rgba(239,68,68,0.1);">
+      ⚠ EinMDP critique: This cascade is directionally useful but overcommitted. Treat as a hypothesis to be tested by Phase 0 instruments, not as the governing framework.
+    </div>
+  </div>
+
+  <!-- INTERVENTION PRIORITY -->
+  <div class="section">
+    <div class="section-title">Phase 2 Intervention Priority (Preliminary — Will Be Overridden by Phase 1 Data)</div>
+    <div class="grid-2">
+      <div>
+        <div class="tier">
+          <div class="tier-header">
+            <div class="tier-badge t1">Tier 1 — 60% resources</div>
+          </div>
+          <div class="intervention-list">
+            <div class="int-chip">Targeted Senolytics (D+Q, Fisetin)</div>
+            <div class="int-chip">Partial Epigenetic Reprogramming (OSK)</div>
+          </div>
+        </div>
+        <div class="tier">
+          <div class="tier-header">
+            <div class="tier-badge t2">Tier 2 — 25% resources</div>
+          </div>
+          <div class="intervention-list">
+            <div class="int-chip">Autophagy / Proteostasis (mTOR)</div>
+            <div class="int-chip">Mitochondrial Restoration (NAD+)</div>
+          </div>
+        </div>
+        <div class="tier">
+          <div class="tier-header">
+            <div class="tier-badge t3">Tier 3 — Monitor / Conditional</div>
+          </div>
+          <div class="intervention-list">
+            <div class="int-chip">Immune Reset / Thymic Regen</div>
+            <div class="int-chip">Stem Cell Niche Restoration</div>
+            <div class="int-chip">Young Blood / Secretome</div>
+          </div>
+        </div>
+      </div>
+      <div class="card accent-purple" style="align-self: start;">
+        <h3>Frontier Track — Protected Work</h3>
+        <p style="margin-bottom: 10px;">Work too important to kill but not yet tractable for mainline:</p>
+        <div class="finding-item"><span class="dot">›</span><div><strong>F1 — ECM Cross-linking Reversal</strong> (glucosepane breakers)</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>F2 — Deep Reprogramming</strong> (beyond OSK pulse)</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>F3 — Novel Driver Discovery</strong> (unbiased CRISPR screens)</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>F4 — Measurement Technology</strong> (next-gen aging clocks)</div></div>
+        <div class="finding-item"><span class="dot">›</span><div><strong>F5 — Theoretical Integration</strong> (information-theoretic aging)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESEARCH TOOLKIT -->
+  <div class="section">
+    <div class="section-title">Research Toolkit — Decision Logic</div>
+    <div class="card">
+      <div class="tool-row">
+        <div class="tool-name">QMD vsearch</div>
+        <div><div class="tool-desc">Local vector search across 800+ indexed documents.</div><div class="tool-when">ALWAYS FIRST. Before any web search. Sub-second. Free.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">WebSearch</div>
+        <div><div class="tool-desc">Built-in Claude web search. ~10 results with snippets.</div><div class="tool-when">Quick fact-checks, recent papers, news. Fast, shallow.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">mitso-search.py</div>
+        <div><div class="tool-desc">Bing headful browser. Real URLs decoded. Standard: URLs + snippets.</div><div class="tool-when">Broader results. Use standard for scanning.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">--fetch 3</div>
+        <div><div class="tool-desc">Fetches full page content (4000 chars) from top N Bing results.</div><div class="tool-when">When snippets aren't enough. Open-access sources only (PMC, preprints).</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">--deep (Sonar)</div>
+        <div><div class="tool-desc">Perplexity Sonar Pro — synthesizes across many sources. Paid.</div><div class="tool-when">When free results are thin. Use sparingly.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">jj dr</div>
+        <div><div class="tool-desc">Gemini Deep Research. Visits 100+ sites. 10-30 min report.</div><div class="tool-when">Complex multi-source questions. ≤10/day quota.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">cc research</div>
+        <div><div class="tool-desc">Claude web + live search + extended thinking. Auto-saves response.</div><div class="tool-when">Need live web data AND deep reasoning together.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">kk (ChatGPT)</div>
+        <div><div class="tool-desc">ChatGPT extended thinking. Best for adversarial pushback.</div><div class="tool-when">Stress-test a position. Design prompts. Challenge hypotheses.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">Ein MDP</div>
+        <div><div class="tool-desc">5-phase adversarial deliberation — ChatGPT + Gemini + Claude argue.</div><div class="tool-when">Major strategic decisions. "Should we do X?" Multi-hour run.</div></div>
+      </div>
+      <div class="tool-row">
+        <div class="tool-name">Haiku agents</div>
+        <div><div class="tool-desc">Parallel sub-agents on fast/cheap model for research legwork.</div><div class="tool-when">Batch research tasks. Dispatch 3-4 in parallel. Deus orchestrates.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEXT STEPS -->
+  <div class="section">
+    <div class="section-title">Next Steps</div>
+    <div class="next-step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h4>Save Phase 0 research findings to synthesis files</h4>
+        <p>Write up today's Haiku agent findings (clocks, model systems, senolytics, reprogramming) into structured synthesis files in deus/synthesis/. Index in QMD.</p>
+      </div>
+    </div>
+    <div class="next-step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h4>Phase 0 — W0.1: Biomarker Panel Validation Research</h4>
+        <p>Deep research into which biological age markers respond to known-effective perturbations within 8-16 weeks. Focus: DunedinPACE + GrimAge response data from intervention studies. Identify the minimal validated panel (≤15 markers).</p>
+      </div>
+    </div>
+    <div class="next-step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h4>Phase 0 — W0.2: Model System Qualification Research</h4>
+        <p>Deep research into ex vivo skin + iPSC organoid protocols for aging assays. Find existing SOPs. Identify groups currently running these systems. Establish feasibility criteria.</p>
+      </div>
+    </div>
+    <div class="next-step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h4>Phase 0 — W0.4: Calibration experiment design</h4>
+        <p>Design the 3-perturbation calibration run: rapamycin, senolytic cocktail, Yamanaka factor pulse — in chosen model systems. Define what "the loop is working" means numerically.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPEN QUESTIONS -->
+  <div class="section">
+    <div class="section-title">Open Questions &amp; Unresolved Contradictions</div>
+    <div class="grid-2">
+      <div class="card accent-amber">
+        <h3 style="margin-bottom: 12px;">Scientific</h3>
+        <div class="finding-item"><span class="dot">›</span><div>Histone economy (Route 2) independence from NAD+/sirtuin: mammalian evidence is yeast-only</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>Compartment-specific dominance (dividing vs postmitotic): working model, not proven</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>Biomarker clocks: correlate with lifespan or causally track it? Not resolved.</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>ECM cross-linking: primary driver or downstream consequence of upstream signaling?</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>Trained innate immunity: no human RCT demonstrates reversal</div></div>
+      </div>
+      <div class="card accent-red">
+        <h3 style="margin-bottom: 12px;">Strategic</h3>
+        <div class="finding-item"><span class="dot">›</span><div>How does dual-track governance prevent the incrementalism trap without creating a fantasy track?</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>Can a radical longevity program remain governable without collapsing into incrementalism OR fantasy?</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>Which intervention class can stabilize heterochromatin in mammals without blowing up cancer risk?</div></div>
+        <div class="finding-item"><span class="dot">›</span><div>What's the minimal biomarker panel that detects a real aging delta in ≤12 weeks?</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; padding: 40px 0 20px; color: var(--text3); font-size: 12px;">
+    DEUS Immortality Research Program &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; 2026-04-10
+  </div>
+
+</div>
+</body>
+</html>
