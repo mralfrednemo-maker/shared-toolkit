@@ -372,14 +372,49 @@ python.exe "C:/Users/chris/PROJECTS/the-thinker/browser-automation/test_chatgpt_
 
 ### WHICH PIPELINE TO USE?
 
+**Fundamental split:** do you want an **answer / decision** (Ein MDP) or a **document / design** (Ein Design)?
+
 | I want to... | Use |
 |---|---|
 | Make a decision / answer "should we do X?" | **Ein MDP** |
-| Stress-test a hypothesis / adversarial review | **Ein Selenium** |
-| Write a spec, policy doc, or research synthesis | **Ein Design** |
-| Synthesize multiple papers into one document | **Ein Design** |
-| Draft a research protocol | **Ein Design** |
-| Risk assessment, ethical question | **Ein MDP** |
+| Risk assessment, ethical question, methodology debate | **Ein MDP** |
+| Resolve "which of these options is best?" | **Ein MDP** |
+| Audit / stress-test a plan or hypothesis | **Ein MDP** |
+| Write a spec, policy doc, architecture document | **Ein Design** |
+| Synthesize multiple papers / reports into one document | **Ein Design** |
+| Draft a research protocol or roadmap | **Ein Design** |
+| Program redesign (take an existing plan, produce a better one) | **Ein Design** |
+
+#### How to recognise MDP-shaped vs Design-shaped prompts
+
+**Use Ein MDP if the deliverable is a verdict, answer, or judgment call.** Prompt patterns:
+- "Should we …?", "Is X safer/better than Y?", "Which …?", "How is X calculated?"
+- "Evaluate / audit / assess …"
+- "What's the right way to …?" (where "right" needs reasoning, not just exposition)
+- "Does this plan hold up?" (stress-test)
+- Risk/ethics framing: "What could go wrong with …?", "Is this responsible / compliant?"
+
+MDP's value is **surfacing disagreement, attacking weak framing, forcing a non-hedged final verdict** (phase4 per-engine + phase5 2/3-majority synthesis by ChatGPT). Output is ~1-2 pages: verdict + reasoning + supporting evidence. Adversarial by design.
+
+**Use Ein Design if the deliverable is a full document you'd show someone.** Prompt patterns:
+- "Write a [spec / protocol / roadmap / policy / guide] for …"
+- "Produce a master design document combining …"
+- "Turn these sources into one unified document covering sections X, Y, Z"
+- "Redesign our [program / architecture / workflow] …"
+- Anything with an expected structure: "include sections on …", "cover the following dimensions …"
+
+Ein Design's value is **convergent co-authoring** (three LLMs draft independently, then revise by reading each other's work across cross-pollination rounds, then one synthesises a final master doc via 2/3 majority). Output is 10-50+ pages with a concrete structure. Collaborative by design.
+
+#### Borderline cases
+
+- **"Should we do X, and if yes, give me the plan."** → Run **Ein MDP** first to get the Go/No-Go verdict + reasoning, then **Ein Design** on the Go side with the MDP verdict as the brief. Two passes, two deliverables. Don't try to squeeze both out of one pipeline — the hybrid prompt weakens both.
+- **"Critique this plan AND produce a better one."** → Two-run strategy: Run 1 = Ein MDP adversarial critique (break the frame, verdict = Retain/Modify/Replace). Compact the output into a handoff artifact. Run 2 = Ein Design synthesis on the handoff artifact alone (not the original plan). See `tech-library/thinker/ein-mdp-two-run-strategy.md` for details. **Never feed the original plan into Run 2** — the narrative weight outweighs the critique.
+- **"Compare these three options."** → If you want a ranked decision, Ein MDP. If you want a written comparison document (table, pros/cons, recommendation section), Ein Design.
+- **"Research question with a definite answer" (e.g., "what is the population of Athens?")** → Ein MDP if the answer is contested or methodology-dependent. Plain `cc research` / `gg dr` if it's a factual lookup.
+
+#### Prompt engineering tip
+
+Before running either pipeline on a non-trivial brief, **consult ChatGPT Extended Thinking** (`cg` with thinking mode). Share the draft prompt and ask for critique on role specificity, task interference, constraint quality, anchoring bias. This catches brittle prompts before they burn an hour-long pipeline run. Full rationale: `memory/feedback_prompt_engineering_with_chatgpt.md`.
 
 ---
 
