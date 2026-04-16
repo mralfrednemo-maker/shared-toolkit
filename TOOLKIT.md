@@ -1,6 +1,6 @@
 # Shared Toolkit — Mitso, Deus, Gemini, Codex & Claude Code
 **Location:** `C:\Users\chris\PROJECTS\shared\TOOLKIT.md` — canonical, single source of truth
-**Last updated:** 2026-04-10
+**Last updated:** 2026-04-14
 **Maintained by:** ALL agents. Any agent that discovers or adds a new tool updates this file immediately, then runs `qmd update shared && qmd embed shared`.
 
 ---
@@ -175,6 +175,78 @@ python3 mitso-search.py "what is the current state of epigenetic reprogramming i
 
 ---
 
+### Headless / Headful Browser — `mitso/browser-automation/`
+**What it does:** Persistent Playwright Chromium profile for accessing authenticated services (Gmail, Telnyx, dashboards) headlessly. Login once, reuse session forever. No browser visible during automated runs. **Windows-native — runs in Claude Code (Mitso's environment), not in WSL/OpenClaw.**
+
+**Location:** `C:\Users\chris\PROJECTS\mitso\browser-automation\`
+
+#### What's Already Authenticated (as of 2026-04-15):
+- Gmail: `mr.alfred.nemo@gmail.com` — use `gmail-search.js`
+- Telnyx: `portal.telnyx.com` — use `telnyx-check.js`
+
+**Profile dir:** `C:\Users\chris\PROJECTS\mitso\browser-automation\profile\` — cookies persist here. Never delete.
+
+#### One-Time Login Setup (add new service)
+**File:** `setup-login.js`
+```bash
+cd "C:\Users\chris\PROJECTS\mitso\browser-automation"
+node setup-login.js
+# Browser opens visibly. Log in to whatever service you need. Close window. Done.
+# Cookies saved to profile/ — reusable forever.
+```
+
+#### Ready-to-Use Headless Scripts
+**Gmail search:**
+```bash
+node gmail-search.js "from:telnyx" 5                # Find emails from telnyx, return first 5
+node gmail-search.js "subject:activation" 3          # Find activation emails, return first 3
+```
+Returns: thread list + first email body + all URLs in email.
+
+**Telnyx status check:**
+```bash
+node telnyx-check.js
+```
+Returns: active numbers, status, connections, last activity.
+
+#### Boilerplate for New Scripts
+Save as `my-script.js` in the `browser-automation/` directory:
+```javascript
+const { chromium } = require('playwright');
+const path = require('path');
+const USER_DATA_DIR = path.join(__dirname, 'profile');
+
+(async () => {
+  const ctx = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  const page = ctx.pages()[0] || await ctx.newPage();
+  page.setDefaultTimeout(30000);
+  
+  await page.goto('https://your-service.com', { waitUntil: 'networkidle' });
+  await page.waitForTimeout(3000); // let SPAs render
+  
+  // ... your scraping / interaction code here
+  
+  console.log(result); // output for Claude Code to capture
+  await ctx.close();
+})();
+```
+
+**Debug trick:** Change `headless: true` to `headless: false` to see the browser while troubleshooting.
+
+#### When to Use
+- Reading emails, checking dashboards, scraping authenticated portals
+- Any task needing a logged-in browser session
+- Faster and more reliable than Chrome MCP for data extraction
+- Rate-limited by `browser_safety.py` — see TIER 2 table above
+
+#### Full Documentation
+**Complete guide:** `C:\Users\chris\PROJECTS\tech-library\infrastructure\mitso-browser-automation.md`
+
+---
+
 ## TIER 3 — AI Conversations (minutes, back-and-forth)
 
 ### ChatGPT — `cg`
@@ -218,26 +290,28 @@ gg new "New topic: what are the latest findings on NAD+ and aging?"
 
 ---
 
-### Claude Web Sonnet — `cc`
-**What it does:** Sends to Claude.ai (Sonnet + extended thinking) in the browser. Best for nuanced analysis, reasoning through complex problems.
+### Claude Web Opus — `cc`
+**What it does:** Sends to Claude.ai (Opus + extended thinking by default) in the browser. Best for nuanced analysis, reasoning through complex problems.
 
 **Commands:**
 ```bash
-cc <prompt>              # Continue thread (Sonnet + extended thinking)
-cc opus <prompt>         # Use Opus model (maximum reasoning)
+cc <prompt>              # Continue thread (Opus + extended thinking — default)
+cc sonnet <prompt>       # Override to Sonnet (adds --model sonnet)
 cc no-think <prompt>     # Disable extended thinking (faster)
 ```
+
+**Model verification (zero-tolerance):** After model selection, the script checks the UI confirms the correct model before sending any prompt. Mismatch → exit code 1, nothing sent.
 
 **Example:**
 ```bash
 cc "Analyze the methodological weaknesses in this mouse study on senolytics"
-cc opus "Design a research protocol for testing X in humans"
+cc sonnet "Quick check: is this calculation correct?"
 ```
 
 ---
 
 ### Claude Web + Research — `cc research`
-**What it does:** Claude web with real-time web search enabled. Searches the live web AND reasons about it with extended thinking. Auto-saves response to `deus/research/`. Best of both worlds.
+**What it does:** Claude web with real-time web search enabled (Opus + extended thinking). Searches the live web AND reasons about it. Auto-saves response to `deus/research/`. Best of both worlds.
 
 **Command:**
 ```bash
@@ -250,6 +324,12 @@ cc research "What are the latest clinical trial results for dasatinib + querceti
 ```
 
 **When to use:** When you need live web data AND deep reasoning together.
+
+**Deep research watchdog:** For `--web-search` (i.e., `cc research`), Claude creates a document/artifact as part of research — this is expected, NOT an error. After research completes, the script:
+1. Tries to extract the report directly from the DOM
+2. If short (<10,000 chars), tries clicking any download link
+3. If still insufficient, sends a follow-up message asking Claude to paste the full report as chat text, then captures that response
+Report is auto-saved to `deus/research/`.
 
 ---
 
@@ -303,66 +383,79 @@ python.exe "C:/Users/chris/PROJECTS/the-thinker/browser-automation/test_chatgpt_
 
 ---
 
-### Ein MDP — `ein-mdp/watchdog.py`
+### Ein MDP — `the-thinker/ein/ein-mdp.py` + `/ein-mdp-loop` skill
 
-**What it is:** The Mitso Decision Protocol. A 5-phase adversarial deliberation pipeline. ChatGPT, Gemini, and Claude argue, challenge each other, cross-examine, and reach a verdict. The right tool when you need a clear answer or decision.
+**What it is:** The Mitso Decision Protocol. A 6-phase adversarial deliberation pipeline. ChatGPT, Gemini, and Claude state opening positions, attack each other with adversarial lenses, cross-examine twice, deliver final verdicts, and then ChatGPT alone synthesizes the three verdicts into one decisive answer via 2/3 majority. The right tool when you need a clear answer or decision.
 
-**5 phases:**
-1. Opening positions — each LLM states its view independently
-2. Contrarian challenges — each attacks the others' positions
-3. Cross-examination R1 — rebuttals
-4. Cross-examination R2 — final positions
-5. Final verdicts — synthesized conclusion
+Forked from the old `mralfrednemo-maker/ein-mdp` repo (now DEPRECATED) onto the proven `ein-design.py` chassis: preflight, pre-submit screenshots, browser_safety, profile suffix, WMI bypass, self-healing selectors, submit verification, heartbeat, session watchdog, staged-output inspector loop, `conversation_registry` resume, per-phase Chrome profiles at `chrome-automation-profile-ein-mdp-{1,2,3}`.
 
-**Use when:** "Should we do X?", "Is this the right approach?", "Which option is best?", risk assessment, ethical questions.
+**6 phases:**
+1. `phase1` — Opening positions (fresh chat per engine).
+2. `phase1_5` — Contrarian critiques. Each engine attacks ONE peer with a fixed adversarial lens (ChatGPT → Claude / Opposite Conclusion; Claude → Gemini / Missing Stakeholder; Gemini → ChatGPT / Pre-Mortem).
+3. `phase2` — Synthesis round with the full prior history uploaded as a context doc (fresh chat per engine). Answers 6 numbered questions.
+4. `phase3` — Cross-examination R2 (SAME THREAD as phase2 — no new_chat, no select_model). Each engine sees both peers' phase2 responses inline, answers 4 questions.
+5. `phase4` — Final per-engine verdicts (SAME THREAD). Each engine sees both peers' phase3 responses inline, answers 5 questions including explicit final verdict + top-3 closing positions.
+6. `phase5` — **Facilitator synthesis** (ChatGPT only, SAME THREAD). Receives Gemini and Claude phase4 verdicts (ChatGPT's own is already in the thread), applies 2/3 majority on remaining disagreements, produces a decisive verdict + reasoning + supporting evidence. This is the deliverable.
 
-**Command:**
-```bash
-cd C:\Users\chris\PROJECTS
+Phase3/4/5 navigate back to the phase2 conversation URL stored in `ledger.conversation_registry.<engine>.phase2_url`; a wrong-thread post would pollute the live debate.
 
-# Minimal — question only
-python ein-mdp/watchdog.py --question "YOUR QUESTION" --preset deep
+**Use when:** "Should we do X?", "Is this the right approach?", "Which option is best?", risk assessment, ethical questions, methodology debates.
 
-# With a detailed brief file
-python ein-mdp/watchdog.py --question "YOUR QUESTION" --brief path/to/brief.txt --preset deep
+**Preferred invocation — via the orchestrator skill (auto inspector + promote loop):**
 ```
+/ein-mdp-loop <brief-file>
+```
+Drives phase-by-phase, runs an inspector sub-agent between phases, promotes staged output to the ledger, halts to Telegram on unrecoverable failures. Sibling skills: `/ein-mdp-status <ledger>` (dashboard), `/ein-mdp-resume <ledger>` (manual recovery).
+
+**Direct invocation (one phase at a time):**
+```bash
+cd C:\Users\chris\PROJECTS\the-thinker\ein
+
+# phase1 creates a new ledger
+python ein-mdp.py --phase phase1 --prompt "C:/Users/chris/PROJECTS/briefs/my-brief.txt" \
+  --profile-suffix mdp --preset deep --kill-stale
+
+# subsequent phases --resume the ledger
+python ein-mdp.py --phase phase1_5 --resume "C:/Users/chris/PROJECTS/mdp-ledger-<ts>.json" --profile-suffix mdp --preset deep
+python ein-mdp.py --phase phase2   --resume "C:/Users/chris/PROJECTS/mdp-ledger-<ts>.json" --profile-suffix mdp --preset deep
+python ein-mdp.py --phase phase3   --resume "C:/Users/chris/PROJECTS/mdp-ledger-<ts>.json" --profile-suffix mdp --preset deep
+python ein-mdp.py --phase phase4   --resume "C:/Users/chris/PROJECTS/mdp-ledger-<ts>.json" --profile-suffix mdp --preset deep
+python ein-mdp.py --phase phase5   --resume "C:/Users/chris/PROJECTS/mdp-ledger-<ts>.json" --profile-suffix mdp --preset deep
+```
+
+The skill handles the `--phase` sequencing + inspector loop for you; direct invocation is for debug / single-phase reruns.
 
 **Key arguments:**
 | Argument | Default | Purpose |
 |---|---|---|
-| `--question` | required | The deliberation question |
-| `--brief` | optional | Path to detailed brief file. If omitted, `--question` is used as the full prompt |
-| `--preset` | `deep` | `fast` (quick models), `standard`, `deep` (thinking models — best quality) |
-| `--only` | all | Restrict to specific engines: `chatgpt`, `gemini`, `claude` |
-| `--kill-stale` | off | Kill orphaned Chrome processes before starting |
+| `--phase` | required | One of `phase1`, `phase1_5`, `phase2`, `phase3`, `phase4`, `phase5` |
+| `--prompt` | required for phase1 | Path to brief file. Stored in the ledger; later phases read from ledger |
+| `--resume` | required for all non-phase1 | Path to the ledger JSON |
+| `--preset` | `deep` | `fast` (instant/Fast/Sonnet), `standard` (latest/Pro/Opus), `deep` (thinking/Pro/Opus+extended-thinking) |
+| `--model-chatgpt` / `--model-gemini` / `--model-claude` | preset | Override preset's per-engine choice |
+| `--no-extended-thinking` | off | Disable Claude extended thinking even if preset enables it |
+| `--only` | all | Restrict to specific engines (testing only; phase3/4 must be all 3; phase5 must be chatgpt only) |
+| `--profile-suffix` | `mdp` | Chrome profile suffix — `chrome-automation-profile-ein-mdp-{1,2,3}` |
+| `--kill-stale` | off on phase1, on for --resume | Kill orphaned automation Chrome before launching |
+| `--no-rate-limit` | off | Bypass browser_safety rate limiting (only when Christo authorizes a run) |
 
-**Presets:**
-- `--preset fast` — lighter models. Use for quick takes or testing.
-- `--preset standard` — balanced models.
-- `--preset deep` — thinking models (R1, Reasoner). Default. Use for anything important.
+**Preset notes:**
+- `deep` currently uses `gemini=Pro` (not Thinking) because the shared `ein_preflight.py` only recognises the `Pro` chip label. Thinking-as-Pro-subset is deferred. Claude still gets `extended_thinking=True` on deep.
 
 **Examples:**
 ```bash
-# Simple question, no brief
-python ein-mdp/watchdog.py \
-  --question "Is partial reprogramming safer than full reprogramming for in vivo use?" \
-  --preset deep
+# Full pipeline via the skill (recommended)
+/ein-mdp-loop C:/Users/chris/PROJECTS/briefs/partial-vs-full-reprogramming.txt
 
-# With a detailed brief
-python ein-mdp/watchdog.py \
-  --question "Should we prioritize senolytics over epigenetic reprogramming in Phase 2?" \
-  --brief C:\Users\chris\PROJECTS\deus\research\phase2-brief.txt \
-  --preset deep
-
-# Quick smoke test — one engine only
-python ein-mdp/watchdog.py \
-  --question "What is the population of Athens?" \
-  --preset fast --only gemini
+# Fast smoke test — direct, one engine, phase1 only
+python ein-mdp.py --phase phase1 --prompt brief.txt --profile-suffix mdp --preset fast --only chatgpt
 ```
 
-**Monitor:** While running, check `_mdp_status.txt` for current phase and response sizes (updated every 60s).
+**Monitor:** The script logs `[ein-m] HH:MM:SS` per-phase progress + heartbeat (engine response size every 20s). Per-phase screenshots in `C:\Users\chris\PROJECTS\downloaded_files\`. Ledger at `C:\Users\chris\PROJECTS\mdp-ledger-<ts>.json`, staged outputs at `<ledger-stem>-staged-<phase>.json`, inspector verdict audit at `<ledger-stem>-verdicts.jsonl`.
 
-**Location:** `C:\Users\chris\PROJECTS\ein-mdp\`
+**Rate limits:** Registered in `browser_safety.py` as `ein_mdp` — 3 calls/hour, 10/day, 300s cooldown. Matches `ein_design`.
+
+**Location:** `C:\Users\chris\PROJECTS\the-thinker\ein\ein-mdp.py` (the old `C:\Users\chris\PROJECTS\ein-mdp\` was archived to `ein-mdp-STALE/` on 2026-04-15 and is DEPRECATED).
 
 ---
 
@@ -406,65 +499,108 @@ python ein-selenium.py --phase 1 --only gemini
 
 **What it is:** A collaborative document synthesis pipeline. Three LLMs independently draft a document from the same brief, then iteratively revise by reading each other's work across multiple cross-pollination rounds. Converges to a single unified document via 2/3 majority.
 
+**Preflight requirement:** Every send path must run `the-thinker/ein/ein_preflight.py` / `PreflightGate` before clicking Submit. The gate verifies model, prompt landing, exact attachment count, attachment-contract wording, blocking errors, enabled send button, screenshot, and JSON report. Do not trust a visible file chip alone. ChatGPT requires clicking `composer-plus-btn` before using the non-image `input[type=file]`; Gemini currently requires the native Windows file picker after `data-test-id="local-images-files-uploader-button"`; Claude should click `Add files, connectors, and more` before revealing `input[data-testid="file-upload"]`. Dry-run check:
+
+The strict provider DOM baseline lives in `the-thinker/ein/ein_preflight_baseline.json`. If any mapped selector, model label, button label, host, attachment chip, or send-button parameter changes, treat it as provider drift and start a troubleshooting session before using Ein Design again.
+
+```bash
+python the-thinker/ein/ein_preflight.py chatgpt --dry-run
+python the-thinker/ein/ein_preflight.py gemini --dry-run
+python the-thinker/ein/ein_preflight.py claude --dry-run
+```
+
 **Use when:** Writing specs, policy drafts, research synthesis, architecture decisions, merging sources into one document — any task where you want 3 LLMs to co-write and converge.
 
-**Pipeline:**
+**Pipeline (5 phases):**
 ```
 draft → cross_1 → cross_2 → cross_3 → final
 ```
-1. **Draft** — 3 LLMs write independently from the same brief
-2. **Cross_1** — each reads the other two's drafts and revises
-3. **Cross_2** — same with cross_1 outputs
-4. **Cross_3** — runs by default; final convergence pass before assembly
-5. **Final** — ChatGPT synthesizes with 2/3 majority on remaining disagreements
+1. **Draft** — 3 LLMs write independently from the same brief + uploaded sources
+2. **Cross_1** — each reads the other two's drafts and produces a revised complete doc + rejection appendix
+3. **Cross_2** — same, one more round of convergence
+4. **Cross_3** — final convergence pass; positions typically stabilise here
+5. **Final** — ChatGPT alone synthesises, resolves remaining disagreements by 2/3 support, writes the master doc
 
-**`--phase` controls how far to run.** Default (no flag) = all phases through final. Passing `--phase X` stops after phase X.
+**One phase per invocation.** As of 2026-04-15 the script runs **exactly one phase per call** — this is the contract the orchestrator relies on. `--phase <name>` is now effectively required for any run past draft.
 
-**Command:**
+---
+
+#### Recommended: unattended autonomous run — `/ein-design-loop`
+
+**This is the default way to run Ein Design.** A Claude Code skill orchestrates the pipeline end-to-end: fires each phase, dispatches an inspector sub-agent between phases to read screenshots + staged output, auto-retries on fixable failures (up to 4 attempts/phase), halts to Telegram on unrecoverable errors.
+
+```
+/ein-design-loop <brief-file>                 # fresh run
+/ein-design-loop <ledger-path>                # resume an in-progress ledger
+/ein-design-loop                              # auto-resume most recent ledger
+```
+
+**Companion skills:**
+- `/ein-design-status [ledger-path]` — dashboard: phases done, staged files awaiting inspection, recent verdicts, attempt counters
+- `/ein-design-resume <ledger-path>` — manual recovery after a halt
+
+**Artefacts per run** (all in `C:\Users\chris\PROJECTS\`):
+- `design-ledger-<TS>.json` — canonical ledger, one entry per promoted phase
+- `design-ledger-<TS>-staged-<phase>.json` — held pending inspector verdict; deleted after promotion
+- `design-ledger-<TS>-verdicts.jsonl` — audit trail of inspector decisions
+- `design-ledger-<TS>-FINAL-MASTER.md` — the master document (written after `final` promotes)
+- `ein_d_<engine>_<phase>_*.png` — screenshots the inspector reads
+
+**Rate limit** (`browser_safety.py`): 3/hour, 10/day. A 5-phase run always trips the hourly cap once; the orchestrator retries attempt 2 with `--no-rate-limit` automatically. Don't pass `--no-rate-limit` manually on attempt 1.
+
+**Chrome profile isolation:** ein-design uses `chrome-automation-profile-ein-design-1/2/3` via `--profile-suffix design` so it never collides with ein-mdp (`-mdp-1/2/3`). Both can run on the same machine — not at the same time.
+
+---
+
+#### Direct invocation — for debugging or surgical re-runs only
+
 ```bash
 cd C:\Users\chris\PROJECTS\the-thinker\ein
 
-# Full run (default) — draft → cross_1 → cross_2 → cross_3 → final
-python ein-design.py \
+# Start a fresh run — first phase only
+python ein-design.py --phase draft \
   --prompt C:\path\to\brief.txt \
-  --upload-files "file1.md,file2.md"
+  --upload-files "file1.md,file2.md" \
+  --profile-suffix design
 
-# Stop after cross_2 (skip cross_3 and final)
-python ein-design.py \
-  --phase cross_2 \
-  --prompt C:\path\to\brief.txt \
-  --upload-files "file1.md,file2.md"
+# Continue phases one at a time, feeding the ledger written by draft
+python ein-design.py --phase cross_1 --resume C:\Users\chris\PROJECTS\design-ledger-YYYYMMDD-HHMMSS.json --profile-suffix design
+python ein-design.py --phase cross_2 --resume ... --profile-suffix design
+python ein-design.py --phase cross_3 --resume ... --profile-suffix design
+python ein-design.py --phase final   --resume ... --profile-suffix design
 
-# Resume from a saved ledger
-python ein-design.py --resume C:\Users\chris\PROJECTS\design-ledger-YYYYMMDD-HHMMSS.json
+# Rate-limit bypass (ONLY on a retry after a failed attempt)
+python ein-design.py --phase cross_3 --resume ... --no-rate-limit --profile-suffix design
 ```
+
+**When to go direct instead of `/ein-design-loop`:**
+- Re-running a single failed phase after you've already inspected the screenshots yourself
+- Testing a selector fix (`--phase draft --only <engine>`)
+- Debugging the ledger structure without inspector interference
+
+For real production runs, always use the skill — unattended operation, inspector gating, and Telegram halts are non-negotiable safety nets.
+
+---
 
 **Key arguments:**
 | Argument | Default | Purpose |
 |---|---|---|
-| `--phase` | `final` (all) | Stop after this phase: `draft`, `cross_1`, `cross_2`, `cross_3`, `final` |
-| `--prompt` | `phase1-v5-prompt.txt` | Path to the brief/prompt file |
-| `--resume` | — | Ledger JSON from a previous run — skips draft, navigates back to existing threads |
-| `--upload-files` | — | Comma-separated source files to upload to each engine |
-| `--quality-criterion` | "more thorough, better reasoned, and more actionable" | What "stronger" means during cross-pollination |
-| `--kill-stale` | off | Kill orphaned Chrome processes |
+| `--phase` | — | Which phase to run: `draft`, `cross_1`, `cross_2`, `cross_3`, `final` (one per call) |
+| `--prompt` | — | Path to the brief/prompt file (required for `draft`) |
+| `--resume` | — | Ledger JSON — required for any phase past draft |
+| `--upload-files` | — | Comma-separated source files to upload (draft only) |
+| `--profile-suffix` | `design` | Chrome profile pool suffix; keep `design` unless isolating a parallel run |
+| `--only <engine>` | — | Run only one of `chatgpt \| gemini \| claude` (debugging) |
+| `--kill-stale` | off | Kill orphaned Chrome processes in the matched profile pool |
+| `--no-rate-limit` | off | Bypass browser_safety caps (retries only — orchestrator handles this) |
 | `--skip-check` | off | Skip brief suitability validation |
 
-**Examples:**
-```bash
-# Synthesize 3 research papers into one summary (full run)
-python ein-design.py \
-  --prompt deus/research/synthesis-brief.txt \
-  --upload-files "deus/research/paper1.md,deus/research/paper2.md,deus/research/paper3.md"
+**Mid-submit inspector gates:** while a phase runs, the script drops gate files into `<ledger_dir>/_gates/` at submit / streaming / completion checkpoints. The orchestrator polls these and can tell the script to `continue`, `refresh`, or `abort` per engine mid-flight (e.g., wedged spinner → refresh tab). Direct-invocation runs skip this — the script defaults all gates to `continue`.
 
-# Stop early at cross_2
-python ein-design.py --phase cross_2 --prompt brief.txt --upload-files "file1.md"
-
-# Test with one engine (draft only)
-python ein-design.py --phase draft --prompt brief.txt --only chatgpt
-```
+**Proven stable:** two clean end-to-end runs on 2026-04-15 (Mobile 3D Capture + Android 3D Capture adjudication), all five phases promoted first-pass, inspector gating held, rate-limit retry handled transparently.
 
 **Location:** `C:\Users\chris\PROJECTS\the-thinker\ein\`
+**Skill source:** `C:\Users\chris\.claude\skills\ein-design-loop\`
 
 ---
 
