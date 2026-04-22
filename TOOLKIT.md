@@ -1,6 +1,6 @@
 # Shared Toolkit — Mitso, Deus, Gemini, Codex & Claude Code
 **Location:** `C:\Users\chris\PROJECTS\shared\TOOLKIT.md` — canonical, single source of truth
-**Last updated:** 2026-04-14
+**Last updated:** 2026-04-17
 **Maintained by:** ALL agents. Any agent that discovers or adds a new tool updates this file immediately, then runs `qmd update shared && qmd embed shared`.
 
 ---
@@ -60,6 +60,112 @@ All browser/pipeline scripts are protected by `browser_safety.py` (`the-thinker/
 
 ---
 
+## PIPELINE-GUARD — Fail-closed protection for launcher scripts
+
+**What it is:** a generic framework that blocks protected Bash launchers (`ein-design.py --upload-files`, `ein-mdp.py --upload-files`, etc.) unless a structured **envelope** is attached that declares + verifies the action. Turns LLM attention failures into deterministic code gates.
+
+**Protects against (2026-04-17 disaster classes):**
+- parse-to-action count lies (envelope claims 5 uploads, command has 4 → BLOCK)
+- Einstein retries (same prompt+model+files re-fired → BLOCK)
+- blind preflight / extraction failures (script now emits structured events; inspector sub-agent dispatches)
+- missing rejection-appendix loops (skill halts instead of retrying identical prompt)
+- mission drift between turns (MISSION.md injected on every UserPromptSubmit hook)
+
+**Where to read the full manual:** `C:/Users/chris/PROJECTS/pipeline-guard/docs/INTEGRATION.md` — complete 9-feature walkthrough + "adding a new pipeline" checklist + "adding a new invariant" checklist.
+
+**Quick reference:**
+- `pipeline-guard/guard.py` — CLI validator dispatch
+- `pipeline-guard/compute_hash.py` — envelope canonical hash computer
+- `pipeline-guard/hooks/pretooluse_guard.py` — PreToolUse hook with `PROTECTED_PATTERNS` (add 1 line per new launcher)
+- `pipeline-guard/validators/*` — per-invariant validators (parse_to_action, retry_delta, rejection_appendix_check)
+- `pipeline-guard/envelopes/active/*.json` — envelopes currently in flight
+
+**Install:** the PreToolUse hook is already registered in `~/.claude/settings.json`. It fires on every Bash call; commands matching `PROTECTED_PATTERNS` require an envelope or get blocked with a clear reason.
+
+**When you add a new pipeline:** follow the checklist in `pipeline-guard/docs/INTEGRATION.md#3-adding-a-new-pipeline`. Roughly: 1 regex line to `PROTECTED_PATTERNS`, ~15 lines of launcher-side shim, A.6 event emission at failure/complete points, a matching orchestrator skill.
+
+**Shortcut — the `/pipeline-guard` slash command:** before starting work on any new pipeline, launcher script, or multi-phase workflow, type `/pipeline-guard <one-line description>` in Claude Code. The skill at `~/.claude/skills/pipeline-guard/SKILL.md` walks the session through the integration review — reads the manual, applies the decision criteria, runs the §3 checklist if protection is needed, logs the decision to `pipeline-guard/PIPELINE-REVIEWS.jsonl`. Use this instead of trying to remember the integration manual exists.
+
+---
+
+## MAKING A LONG TASK SURVIVE COMPACTION
+
+**When to use:** any multi-step operation that will outlive a single conversation — long pipelines, multi-prompt design sequences, staged migrations, anything where "the session crashed halfway, now what" is a real risk.
+
+**Core principle:** the filesystem is ground truth, not the checklist. A checkbox only reflects what the last session *said* it did. Before resuming, a new session must verify on-disk artefacts and sync the checklist to reality.
+
+### Required file anatomy
+
+Create one markdown file at `C:\Users\chris\.claude\projects\C--Users-chris-PROJECTS\memory\<topic>-todo.md` with these sections in this order:
+
+```
+---
+name: <topic> — Active Execution Plan (survives compaction)
+description: ACTIVE PLAN — <scope>. Read FIRST every session.
+type: project
+---
+
+# <topic> — Execution Plan
+
+**Status:** ACTIVE | COMPLETED <date>
+**Last verified:** <YYYY-MM-DD>   ← re-verify invariants if older than 7 days
+
+## §1 — Resume Procedure       ← what a new session does before anything
+  1. Re-sync external state (if plan depends on chat threads, queues, remote APIs)
+  2. Verify on-disk artefacts against §6; correct stale checkboxes
+  3. Find first unchecked sub-step in §6 — resume from there
+  4. Execute ONE sub-step, tick BEFORE moving on
+  5. On any non-zero exit / missing file: STOP, append §7, max one retry, page Christo
+
+## §2 — Invariants              ← never-violate rules (numbered)
+## §3 — Data Needed             ← table of paths to verify + paths that must NOT exist
+## §4 — Parsing / Extraction    ← if plan ingests replies/outputs, format rules go here
+## §5 — Bail-out Rules          ← concrete stop conditions
+## §6 — Steps                   ← numbered, each with a Verify signature
+## §6 — Current State           ← the ONLY mutating section; checkboxes, micro-grained
+## §7 — Failure Log             ← append-only; every deviation gets a line
+```
+
+### Discipline rules (bake into the file, not just follow by memory)
+
+1. **Tick the checkbox BEFORE the next sub-step starts.** Not after the phase.
+2. **One checkbox = one atomic disk-touching operation.** "Run X pipeline" is not one step — it's {launch, save output, verify output}.
+3. **Verify from disk, not from checklist.** Every step has a Verify signature (file exists, >N bytes, contains marker). Resumer verifies before trusting any tick.
+4. **Failures never silently retry.** Non-zero exit = append §7, max one retry, then stop.
+5. **Completed plans stay in place** with `**Status:** COMPLETED <date>` at the top; remove the `ACTIVE PLAN` line from `MEMORY.md`. Do not move the file.
+6. **Re-sync external state** as step 1 of the Resume Procedure if the plan depends on anything outside the local filesystem. Example for ChatGPT threads: call `dump_chatgpt_thread.py` and confirm the last message is still the one the plan expects.
+
+### Discovery — how the next session finds it
+
+- **Add a one-line index entry to `MEMORY.md`**, with the prefix `**ACTIVE PLAN:**` so it jumps out during session-start auto-load:
+  ```markdown
+  ## <Topic>
+  - **ACTIVE PLAN:** [<topic> Execution Plan](<topic>-todo.md) — Read FIRST. <one-line status hook>
+  ```
+- **Re-embed QMD** after each meaningful edit so vector queries surface the plan:
+  ```
+  qmd update mitso && qmd embed mitso
+  ```
+
+### Failure modes each part of the structure addresses
+
+| Failure mode | Structural defense |
+|---|---|
+| Previous session crashed mid-update → stale checkbox | §1 step 2 (verify from disk), §6 Verify signatures |
+| Two sessions resume simultaneously → clobber | _deliberately no lockfile_ (single-user machine); stop if you ever hit this |
+| Plan's environment drifted since writing | "Last verified" stale-check, external-state re-sync step |
+| Resumer redoes already-complete work | Micro-checkbox granularity, filesystem ground-truth rule |
+| Resumer skips a required precondition | §3 Data Needed table read first |
+| Silent partial-completion of a step | Each step's Verify signature, one-checkbox-per-atomic-op |
+| Plan accumulates undocumented ad-hoc deviations | §7 Failure Log as single source of truth for all anomalies |
+| Index entry scrolls off MEMORY.md's auto-load window | Prefix `**ACTIVE PLAN:**` placement near top of MEMORY.md |
+
+### Reference implementation
+
+See `C:\Users\chris\.claude\projects\C--Users-chris-PROJECTS\memory\bodyscan-eindesign-todo.md` — the BodyScan 3D Ein Design P5-P10 plan is written exactly to this template. Copy that file's structure when starting a new survivable plan.
+
+---
+
 ## TIER 1 — Local Knowledge (instant, always first)
 
 ### QMD — Local Vector Search
@@ -101,6 +207,27 @@ qmd vsearch "what do we know about senolytics"   # Claude Code shorthand
 **When to use:** EVERY research session starts here. Before Googling. Before WebSearch. Before asking any LLM. Check what we already know.
 
 **Collections indexed:** deus (27 docs), mitso (2), thinker (17), techlib (106), lightrag (153), memory (52), openclaw (435), shared (1) = ~800 docs total.
+
+---
+
+### XP Orchestrator — Local Claude/Gemini/Codex Runner
+**What it does:** Runs the local XP protocol for a target repo, writes plan/scope/review/triage/test artifacts under `.xp-orchestrator/<task-id>/`, and feeds the portal.
+
+**Read first:**
+- `C:/Users/chris/PROJECTS/xp-orchestrator/README.md`
+- `C:/Users/chris/PROJECTS/xp-orchestrator/INSTRUCTIONS.md`
+
+**Primary modes:**
+- `--claude-provider minimax --claude-model opus`  # maps to `MiniMax-M2.7-highspeed`
+- `--claude-provider gemini --claude-model gemini-3.1-pro-preview`
+- `--claude-provider raw` for direct Claude Code
+
+**Fallback pattern:**
+- `--claude-fallback-provider gemini --claude-fallback-model gemini-3.1-pro-preview`
+- default chain is `minimax -> gemini -> codex`
+- If Minimax/quota fails, the runner retries with Gemini, then Codex takes over as planner/reviewer if both external suppliers are exhausted.
+
+**When to use:** any task that should be built through the orchestrator instead of hand-editing files directly.
 
 ---
 
@@ -175,16 +302,62 @@ python3 mitso-search.py "what is the current state of epigenetic reprogramming i
 
 ---
 
+### Firecrawl — MCP + CLI (`firecrawl_search`, `firecrawl_scrape`, etc.)
+**What it does:** Turns any URL into clean LLM-ready markdown. Built-in search-and-scrape, handles JavaScript-rendered pages, can crawl entire sites, and has a cloud browser for pages requiring login/interaction. Faster and cleaner than WebFetch for web content.
+
+**MCP tools (use directly in Claude Code sessions):**
+```
+firecrawl_search    — web search + optionally scrapes each result's full content
+firecrawl_scrape    — single URL → clean markdown (strips ads/nav/boilerplate)
+firecrawl_crawl     — recursively follow all links across a site
+firecrawl_map       — discover all URLs on a domain without scraping
+firecrawl_extract   — structured data extraction with a schema
+firecrawl_browser_* — spin up a cloud Chromium for JS-heavy/auth-gated pages
+firecrawl_agent     — autonomous mode: give a task, it navigates and extracts
+```
+
+**CLI (Bash, good for saving output):**
+```bash
+firecrawl scrape <url> -o .firecrawl/out.md              # single page
+firecrawl search "query" --scrape -o .firecrawl/out.md   # search + scrape results
+firecrawl crawl <url>                                     # full site
+firecrawl map <url>                                       # URL discovery only
+```
+
+**⚠ Critical rule:** ALWAYS output to a file (`-o .firecrawl/filename.md`) or capture MCP results to disk — never dump raw into context. A 3-result search can return 96k+ chars.
+
+**API key:** `fc-a7c85f5009684e7bac81acb408da1491` (in `~/.claude.json` under PROJECTS mcpServers)
+
+**When to use:**
+- Scraping a known URL cleanly → `firecrawl_scrape` (beats WebFetch for content quality)
+- Search + read results in one shot → `firecrawl_search` with `scrapeOptions`
+- JS-rendered / auth-gated pages → `firecrawl_browser_*`
+- Ingesting entire docs site → `firecrawl_crawl`
+- No cost advantage over WebSearch for simple queries — use WebSearch for quick lookups, Firecrawl when you need the actual page content
+
+---
+
 ### Headless / Headful Browser — `mitso/browser-automation/`
 **What it does:** Persistent Playwright Chromium profile for accessing authenticated services (Gmail, Telnyx, dashboards) headlessly. Login once, reuse session forever. No browser visible during automated runs. **Windows-native — runs in Claude Code (Mitso's environment), not in WSL/OpenClaw.**
 
 **Location:** `C:\Users\chris\PROJECTS\mitso\browser-automation\`
 
-#### What's Already Authenticated (as of 2026-04-15):
+#### What's Already Authenticated (as of 2026-04-16):
 - Gmail: `mr.alfred.nemo@gmail.com` — use `gmail-search.js`
 - Telnyx: `portal.telnyx.com` — use `telnyx-check.js`
+- **ChatGPT**: `chatgpt.com` — logged in 2026-04-16. Headless read works with stealth flags (see verified config below).
+- **Gemini**: `gemini.google.com` — logged in 2026-04-16. Headless read works.
+- **Claude**: ⚠️ cookies saved 2026-04-16 but **vanilla Playwright headless cannot bypass Claude's Cloudflare challenge** (hits `/api/challenge_redirect`). For Claude reads, use `mcp__claude-in-chrome` against the user's live Chrome instead — it's already past Cloudflare. This profile is NOT the right tool for Claude.
 
 **Profile dir:** `C:\Users\chris\PROJECTS\mitso\browser-automation\profile\` — cookies persist here. Never delete.
+
+**Required stealth config for ChatGPT/Gemini headless reads:**
+- `headless: true`
+- `args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-dev-shm-usage']`
+- `userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'`
+- `waitUntil: 'domcontentloaded'` — NOT `'networkidle'` (Cloudflare keeps network busy, never fires)
+- After `page.goto`, poll `page.title()` for up to 45s until it stops matching `/just a moment|checking your browser|cloudflare/i` — this is how you detect Cloudflare clearing.
+- Verified working: `C:\Users\chris\PROJECTS\mitso\browser-automation\verify-logins.js`
 
 #### One-Time Login Setup (add new service)
 **File:** `setup-login.js`
@@ -244,6 +417,164 @@ const USER_DATA_DIR = path.join(__dirname, 'profile');
 
 #### Full Documentation
 **Complete guide:** `C:\Users\chris\PROJECTS\tech-library\infrastructure\mitso-browser-automation.md`
+
+---
+
+### Generic Browser Navigation — `navigate.js`
+**What it does:** Full headful/headless website navigation — click, fill, scroll, extract, change settings, open/close tabs. Mirrors the OpenClaw Kasm autonomous browser capability, but native Windows Playwright with a persistent profile. Write any interaction as a CLI command.
+
+**Location:** `C:\Users\chris\PROJECTS\mitso\browser-automation\navigate.js`
+
+#### One-Time Setup (login to any site)
+```bash
+cd C:\Users\chris\PROJECTS\mitso\browser-automation
+node setup-nav.js --url "https://target-site.com/login"
+# Headful browser opens. Log in manually. Close window.
+# Cookies saved to profile/ — reusable for all subsequent headless runs.
+```
+
+#### Navigation CLI
+```bash
+# Basic navigation + screenshot
+node navigate.js --url "https://example.com/settings" --screenshot
+
+# Click a button, fill a form, take screenshot
+node navigate.js --url "https://example.com" --actions "fill:#username:me|fill:#password:secret|click:.login-btn|screenshot"
+
+# Wait for element to appear, then extract text
+node navigate.js --url "https://example.com" --actions "waitFor:.loaded|extract:h1"
+
+# Extract ALL matching elements (e.g. all prices, all links)
+node navigate.js --url "https://example.com/products" --extract-all ".price" --extract-all "a[href]"
+
+# Open a link in a new tab, switch to it, extract content
+node navigate.js --url "https://example.com" --actions "click:.card[href]|switchTab:1|extract:.detail"
+
+# Scroll to bottom, wait, take screenshot
+node navigate.js --url "https://example.com" --actions "scroll:0,2000|wait:500|screenshot"
+
+# Headful mode (watch the browser work)
+node navigate.js --url "https://example.com" --actions "click:.next|wait:1000" --headless false
+
+# Multi-step: navigate → login → go to settings → change a toggle
+node navigate.js --url "https://example.com/login" --actions "fill:#email:user@test.com|fill:#pass:pass123|click:.submit|waitURL:**/dashboard"
+node navigate.js --url "https://example.com/settings" --actions "click:.notifications|click:.toggle-enable|click:.save" --goto-tab 0
+```
+
+#### Action Tokens
+| Token | Example | What it does |
+|-------|---------|--------------|
+| `click:selector` | `click:#save-btn` | Single click |
+| `fill:selector:value` | `fill:#input:hello` | Clear + type |
+| `type:selector:value` | `type:#input:hello` | Append without clearing |
+| `select:selector:value` | `select:#country:US` | Dropdown option |
+| `press:selector:keys` | `press:#input:Enter` | Click + key press |
+| `hover:selector` | `hover:.dropdown` | Mouse hover |
+| `dblclick:selector` | `dblclick:#el` | Double click |
+| `rightclick:selector` | `rightclick:#el` | Right-click |
+| `scroll:selector\|x,y` | `scroll:.footer\|0,500` | Scroll to element or px |
+| `wait:n` | `wait:2000` | Sleep n ms |
+| `waitFor:selector` | `waitFor:.loaded` | Wait for selector |
+| `waitURL:pattern` | `waitURL:**/dashboard` | Wait for URL glob |
+| `screenshot` | `screenshot` | Take screenshot |
+| `extract:selector` | `extract:.price` | Print first match's text |
+| `extractAll:selector` | `extractAll:a` | Print ALL matches' text |
+| `extractAttr:selector` | (use `--extract-attr href`) | Extract attribute |
+| `switchTab:n` | `switchTab:1` | Switch to tab index |
+| `closeTab:n` | `closeTab:0` | Close tab index |
+| `goto:url` | `goto:https://...` | Navigate without new page |
+| `evaluate:js` | `evaluate:document.title` | Run arbitrary JS |
+
+#### Key Flags
+| Flag | Purpose |
+|------|---------|
+| `--screenshot` | Screenshot at end (saved to `navigate-screenshot.png`) |
+| `--screenshot-path <path>` | Custom screenshot path |
+| `--extract "sel"` | Extract text from first match |
+| `--extract-all "sel"` | Extract text from ALL matches |
+| `--extract-attr "href"` | Extract attribute instead of text |
+| `--headless false` | Watch the browser work live |
+| `--timeout ms` | Page/element timeout (default 30000) |
+| `--new-tab url` | Open URL in new tab |
+| `--goto-tab n` | Operate on tab index n |
+| `--wait-for-selector sel` | Block until selector appears |
+| `--cookies "JSON"` | Set cookies before navigation |
+
+#### Write Your Own Interaction
+```javascript
+// Use the same pattern as navigate.js — persistent profile, stealth flags
+const { chromium } = require('playwright');
+const path = require('path');
+const USER_DATA_DIR = path.join(__dirname, 'profile');
+
+(async () => {
+  const ctx = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    headless: true,
+    viewport: { width: 1280, height: 900 },
+    args: ['--disable-blink-features=AutomationControlled','--no-sandbox','--disable-dev-shm-usage'],
+  });
+  const page = ctx.pages()[0];
+  await page.goto('https://your-site.com', { waitUntil: 'domcontentloaded' });
+  // ... your custom steps
+  await ctx.close();
+})();
+```
+
+**Rate limit:** Not rate-limited — direct Playwright, no `browser_safety.py` guard. Use responsibly.
+
+---
+
+### ChatGPT Full-Thread Dump — `dump_chatgpt_thread.py`
+**What it does:** Exports an entire ChatGPT conversation (all user + assistant turns, in order, with timestamps) to disk as JSON + Markdown. Orders of magnitude faster and cleaner than DOM scraping, and bypasses ChatGPT's UI virtualisation (which only renders turns that get scrolled into view).
+
+**Location:** `C:\Users\chris\PROJECTS\shared\scripts\dump_chatgpt_thread.py`
+
+**Usage:**
+```bash
+python dump_chatgpt_thread.py <conversation-id> [out-dir]
+# out-dir defaults to C:/Users/chris/Downloads
+```
+
+**Outputs (in `out-dir`):**
+- `chatgpt-thread-<id>.json` — `{title, id, turns: [{role, text, ts}, ...]}`
+- `chatgpt-thread-<id>.md`   — flattened, chronological, one `## [N] role` heading per turn
+
+**Example:**
+```bash
+python C:/Users/chris/PROJECTS/shared/scripts/dump_chatgpt_thread.py 69e0403b-04b8-838f-a55c-ad7f7bd4a392
+# Saved 171 turns, 200KB JSON + 190KB markdown
+```
+
+**How it works (so you can reuse the technique):**
+1. Launches Chrome via `seleniumbase Driver(uc=True)` against the profile at `C:\Users\chris\PROJECTS\mitso\browser-automation\profile` (same profile as `chatgpt_selenium_post.py`).
+2. Navigates to `https://chatgpt.com/c/<id>` so cookies are in scope.
+3. Executes this async fetch inside the page:
+   ```js
+   const sess = await fetch('/api/auth/session', {credentials:'include'}).then(r=>r.json());
+   const tok  = sess.accessToken;            // ~2 KB bearer JWT
+   const r    = await fetch(`/backend-api/conversation/${id}`, {
+     credentials:'include',
+     headers: {'Authorization': `Bearer ${tok}`}
+   });
+   return r.text();                          // full thread JSON, mapping + current_node
+   ```
+4. Parses `mapping` and walks the parent chain up from `current_node` to the root to get the linear ordering (the mapping is a tree because of edits/regens — this picks the visible branch).
+5. Filters to `user` / `assistant` roles, flattens `content.parts`, writes to disk.
+
+**Why not simpler approaches (lessons learned):**
+- `browser_cookie3` → fails with `RequiresAdminError` because Chrome holds a live lock on the cookie DB; shadow-copy needs admin.
+- `claude-in-chrome` MCP + anchor download → silently fails (programmatic download without user gesture gets suppressed by Chrome).
+- `claude-in-chrome` MCP + `fetch` POST to a local listener → blocked by ChatGPT's CSP `connect-src` (even with `mode: 'no-cors'`).
+- `navigator.clipboard.writeText` in background tab → fails with "Document is not focused".
+- `read_network_requests` → returns request metadata only, no response body.
+- DOM scraping each turn → works but ChatGPT virtualises the message list; you must scroll each assistant turn into view for its content to render. ~10x slower on long threads, fragile, and loses structured timestamps.
+
+**When to use:**
+- Need to reconstruct the full design-sequence history of a long ChatGPT thread (e.g., Ein Design runs).
+- Need to audit what was actually said across all rounds without scrolling.
+- Need a machine-readable transcript for downstream tools (parse per-turn role + timestamp).
+
+**Requirements:** the mitso profile must be logged in to chatgpt.com. If it isn't, re-run `node C:\Users\chris\PROJECTS\mitso\browser-automation\setup-login.js` and sign in once.
 
 ---
 
@@ -370,7 +701,7 @@ python.exe "C:/Users/chris/PROJECTS/the-thinker/browser-automation/test_chatgpt_
 > **RULE: Never manually orchestrate multiple LLMs yourself.**
 > Never call `cg`, `gg`, `cc` one by one, collect responses, and summarize them yourself. That is not facilitation — that is you doing the work that Ein exists to do, worse and slower. Use the right pipeline below.
 
-### WHICH PIPELINE TO USE?
+### WHICH PIPELINE TO USE? <!-- drift-ignore: decision guide, not a tool -->
 
 **Fundamental split:** do you want an **answer / decision** (Ein MDP) or a **document / design** (Ein Design)?
 
@@ -466,7 +797,7 @@ The skill handles the `--phase` sequencing + inspector loop for you; direct invo
 | `--phase` | required | One of `phase1`, `phase1_5`, `phase2`, `phase3`, `phase4`, `phase5` |
 | `--prompt` | required for phase1 | Path to brief file. Stored in the ledger; later phases read from ledger |
 | `--resume` | required for all non-phase1 | Path to the ledger JSON |
-| `--preset` | `deep` | `fast` (instant/Fast/Sonnet), `standard` (latest/Pro/Opus), `deep` (thinking/Pro/Opus+extended-thinking) |
+| `--preset` | `deep` | `fast` (instant/Fast/Sonnet 4.6), `standard` (latest/Pro/Opus), `deep` (thinking/Pro/Sonnet 4.6+extended-thinking) |
 | `--model-chatgpt` / `--model-gemini` / `--model-claude` | preset | Override preset's per-engine choice |
 | `--no-extended-thinking` | off | Disable Claude extended thinking even if preset enables it |
 | `--only` | all | Restrict to specific engines (testing only; phase3/4 must be all 3; phase5 must be chatgpt only) |
@@ -475,7 +806,7 @@ The skill handles the `--phase` sequencing + inspector loop for you; direct invo
 | `--no-rate-limit` | off | Bypass browser_safety rate limiting (only when Christo authorizes a run) |
 
 **Preset notes:**
-- `deep` currently uses `gemini=Pro` (not Thinking) because the shared `ein_preflight.py` only recognises the `Pro` chip label. Thinking-as-Pro-subset is deferred. Claude still gets `extended_thinking=True` on deep.
+- `deep` currently uses `gemini=Pro` (not Thinking) because the shared `ein_preflight.py` only recognises the `Pro` chip label. Thinking-as-Pro-subset is deferred. Claude still gets `extended_thinking=True` on deep, using Sonnet 4.6.
 
 **Examples:**
 ```bash
@@ -531,6 +862,11 @@ python ein-selenium.py --phase 1 --only gemini
 ---
 
 ### Ein Design — `ein-design.py`
+
+> **⚠ Canonical location — DO NOT use any copy elsewhere:**
+> `C:\Users\chris\PROJECTS\the-thinker\ein\ein-design.py`
+>
+> Any copy at `C:\Users\chris\PROJECTS\ein-design.py` (root), or in any other directory, is **stale** — delete it, don't run it. A stale root-level copy was purged on 2026-04-15. The same rule applies to `ein-mdp.py` and `ein-selenium.py` — always run from `the-thinker/ein/`.
 
 **What it is:** A collaborative document synthesis pipeline. Three LLMs independently draft a document from the same brief, then iteratively revise by reading each other's work across multiple cross-pollination rounds. Converges to a single unified document via 2/3 majority.
 
@@ -693,7 +1029,7 @@ cx ro "Investigate why the Bing scraper is returning empty results"
 
 ## TIER 8 — Storage & Memory
 
-### QMD Indexing
+### QMD Indexing <!-- drift-ignore: operation, not a tool -->
 **What it does:** After saving any file, re-indexes the relevant collection so the content becomes searchable via `qmd vsearch`.
 
 **Commands:**
@@ -712,7 +1048,7 @@ qmd update && qmd embed
 
 ---
 
-### File Storage Locations
+### File Storage Locations <!-- drift-ignore: reference table, not a tool -->
 | What | Where |
 |------|-------|
 | Deus research findings | `C:\Users\chris\PROJECTS\deus\research\` |
@@ -727,7 +1063,7 @@ qmd update && qmd embed
 
 ## AGENT MESSAGING
 
-### Send a message to another agent
+### Send a message to another agent <!-- drift-ignore: operation, not a distinct tool -->
 ```bash
 /msg deus <message>     # From Mitso or Claude to Deus
 /msg mitso <message>    # From Deus or Claude to Mitso
