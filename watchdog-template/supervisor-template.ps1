@@ -224,6 +224,60 @@ function Send-ProgressUpdate {
   }
 }
 
+function Send-ExternalTerminalProgress {
+  param(
+    [hashtable]$Backlog,
+    [string]$ItemId,
+    [string]$Status,
+    [string]$Action
+  )
+
+  $progress = Get-ConfigValue $Backlog "progress_updates" @{}
+  if (-not [bool](Get-ConfigValue $progress "enabled" $false)) {
+    Write-Event $Backlog @{ event = "external_terminal_progress_suppressed"; item_id = $ItemId; status = $Status; reason = "progress_disabled" }
+    return
+  }
+  if (-not [bool](Get-ConfigValue $progress "external_terminal_updates" $true)) {
+    Write-Event $Backlog @{ event = "external_terminal_progress_suppressed"; item_id = $ItemId; status = $Status; reason = "external_terminal_updates_disabled" }
+    return
+  }
+
+  $notification = Get-ConfigValue $Backlog "notification" @{}
+  $bridge = [string](Get-ConfigValue $notification "telegram_bridge" "")
+  if (-not $bridge.Trim()) {
+    Write-Event $Backlog @{ event = "external_terminal_progress_suppressed"; item_id = $ItemId; status = $Status; reason = "missing_bridge" }
+    return
+  }
+
+  $stateFile = [string](Get-ConfigValue $progress "state_file" "progress-state.json")
+  $statePath = if ([System.IO.Path]::IsPathRooted($stateFile)) { $stateFile } else { Join-Path $BacklogDir $stateFile }
+  $state = @{}
+  if (Test-Path -LiteralPath $statePath) {
+    try {
+      $obj = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+      foreach ($prop in $obj.PSObject.Properties) { $state[$prop.Name] = $prop.Value }
+    } catch {}
+  }
+
+  $key = "external-terminal|$ItemId|$Action|$Status"
+  if ([string](Get-ConfigValue $state "last_external_terminal_progress_key" "") -eq $key) {
+    Write-Event $Backlog @{ event = "external_terminal_progress_deduped"; item_id = $ItemId; status = $Status; action = $Action }
+    return
+  }
+
+  $text = "$($Backlog.project_name): item $ItemId reached external terminal state $Status ($Action). Supervisor will not relaunch duplicate work for this item."
+  try {
+    Invoke-RestMethod -Uri $bridge -Method Post -ContentType "application/json" -Body (@{ text = $text } | ConvertTo-Json) -TimeoutSec 10 | Out-Null
+    $state["last_external_terminal_progress_key"] = $key
+    $state["last_external_terminal_progress_at"] = [DateTimeOffset]::UtcNow.ToString("o")
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($statePath, ($state | ConvertTo-Json -Depth 8), $utf8NoBom)
+    Write-Event $Backlog @{ event = "external_terminal_progress_sent"; item_id = $ItemId; status = $Status; action = $Action; text = $text }
+  } catch {
+    Write-Event $Backlog @{ event = "external_terminal_progress_failed"; item_id = $ItemId; status = $Status; action = $Action; error = $_.Exception.Message; text = $text }
+  }
+}
+
 function Invoke-BacklogCommand {
   param(
     [hashtable]$Backlog,
@@ -478,6 +532,9 @@ function Invoke-SupervisorIteration {
     $external = Invoke-ExternalStateTracking -Backlog $backlog -Item $item
     if ([bool]$external.handled) {
       Write-Event $backlog @{ event = "external_state_applied"; item_id = $item.id; action = $external.action; status = $external.status }
+      if ([string]$external.action -in @("done", "blocked")) {
+        Send-ExternalTerminalProgress -Backlog $backlog -ItemId ([string]$item.id) -Status ([string]$external.status) -Action ([string]$external.action)
+      }
       if ([string]$external.action -eq "blocked") {
         Send-Alert $backlog "action_required" "Backlog item $($item.id) is blocked by external state: $($external.status)" "external-blocked-$($item.id)"
       }

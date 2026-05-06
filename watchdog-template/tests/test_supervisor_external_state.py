@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import subprocess
+from threading import Thread
 from pathlib import Path
 
 
-TEMPLATE_ROOT = Path("C:/Users/chris/PROJECTS/shared/watchdog-template")
+TEMPLATE_ROOT = Path(__file__).resolve().parents[1]
 SUPERVISOR = TEMPLATE_ROOT / "supervisor-template.ps1"
 
 
@@ -27,6 +29,27 @@ def _run_supervisor(backlog_path: Path) -> subprocess.CompletedProcess[str]:
         timeout=30,
         check=False,
     )
+
+
+def _capture_server() -> tuple[ThreadingHTTPServer, list[str]]:
+    received: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            received.append(str(payload.get("text", "")))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, received
 
 
 def test_external_closed_state_marks_item_done_without_running_command(tmp_path: Path) -> None:
@@ -154,3 +177,88 @@ def test_external_rejected_state_marks_item_blocked(tmp_path: Path) -> None:
     assert updated["status"] == "blocked"
     assert updated["items"][0]["status"] == "blocked"
     assert "external state" in updated["items"][0]["last_error"]
+
+
+def test_external_terminal_state_sends_immediate_progress_update(tmp_path: Path) -> None:
+    server, received = _capture_server()
+    try:
+        state_path = tmp_path / "dialogue-state.json"
+        backlog_path = tmp_path / "backlog.json"
+        event_log = tmp_path / "events.jsonl"
+        state_path.write_text(
+            json.dumps(
+                {
+                    "items": {
+                        "ITEM-001": {
+                            "status": "closed_accepted",
+                            "terminal_verdict": "ACCEPT",
+                            "conversation_id": "dialogue-123",
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        backlog_path.write_text(
+            json.dumps(
+                {
+                    "schema": "durable-watchdog-backlog-v1",
+                    "project_name": "Immediate Terminal Test",
+                    "project_root": str(tmp_path),
+                    "goal": "Prove terminal external state is visible immediately.",
+                    "status": "running",
+                    "notification": {
+                        "mode": "ActionRequired",
+                        "telegram_bridge": f"http://127.0.0.1:{server.server_port}/send",
+                        "repeat_alert_minutes": 120,
+                    },
+                    "progress_updates": {
+                        "enabled": True,
+                        "interval_seconds": 900,
+                        "summary_command": "Write-Output 'periodic only'",
+                        "state_file": "progress-state.json",
+                        "external_terminal_updates": True,
+                    },
+                    "supervisor": {
+                        "interval_seconds": 300,
+                        "max_retries_per_item": 3,
+                        "event_log": str(event_log),
+                        "state_file": "supervisor-state.json",
+                    },
+                    "final_validation_command": "exit 0",
+                    "items": [
+                        {
+                            "id": "ITEM-001",
+                            "description": "Already accepted externally.",
+                            "required": True,
+                            "status": "pending",
+                            "attempts": 0,
+                            "run_command": "Write-Output 'should not run'",
+                            "check_command": "exit 1",
+                            "recover_command": "",
+                            "state_tracking": {
+                                "enabled": True,
+                                "state_file": str(state_path),
+                                "status_path": ["items", "ITEM-001", "status"],
+                                "done_statuses": ["closed_accepted"],
+                                "blocked_statuses": ["rejected"],
+                            },
+                            "evidence": [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = _run_supervisor(backlog_path)
+
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert any(
+            "ITEM-001 reached external terminal state closed_accepted" in text
+            for text in received
+        )
+        events = [json.loads(line) for line in event_log.read_text(encoding="utf-8").splitlines()]
+        assert any(event["event"] == "external_terminal_progress_sent" for event in events)
+    finally:
+        server.shutdown()

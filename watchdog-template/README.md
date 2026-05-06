@@ -70,6 +70,8 @@ Example:
 
 If the external status is in `done_statuses`, the item is marked `done` without rerunning recovery. If it is in `blocked_statuses`, the item is marked `blocked` and the backlog status becomes `blocked`. If it is `running` or `waiting`, the supervisor records that state and avoids duplicate launches for that poll.
 
+When `progress_updates.enabled` is true, terminal external states also produce an immediate progress message by default, independent of the normal progress interval. This prevents a completed or rejected validator/dialogue state from sitting unseen until the next periodic status update. Set `"external_terminal_updates": false` under `progress_updates` to suppress that immediate terminal progress message.
+
 ## How To Use
 
 1. Copy `backlog-template.json` into the project, for example:
@@ -111,11 +113,12 @@ If the external status is in `done_statuses`, the item is marked `done` without 
      "enabled": true,
      "interval_seconds": 900,
      "summary_command": "Write-Output 'Sentence one. Sentence two. Sentence three.'",
-     "state_file": "progress-state.json"
+     "state_file": "progress-state.json",
+     "external_terminal_updates": true
    }
    ```
 
-   The summary command should return exactly the human-facing status text to send, ideally three short sentences every 15 minutes.
+   The summary command should return exactly the human-facing status text to send, ideally three short sentences every 15 minutes. External terminal updates are separate from the interval and are deduped by item/status/action.
 
 ## Quality Gates
 
@@ -127,6 +130,7 @@ Before claiming unattended supervision works, verify:
 - a deliberately failing check produces `blocked` or alert behavior;
 - a passing check marks an item `done`;
 - external state can mark an item `done` or `blocked` without duplicate recovery;
+- external terminal state emits an immediate `external_terminal_progress_sent` event when progress updates are enabled;
 - final validation controls the global `complete` state;
 - Telegram sends only action-required messages in `ActionRequired` mode.
 - If routine progress is enabled, progress text arrives at the requested cadence and stays concise.
