@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import subprocess
@@ -262,3 +263,142 @@ def test_external_terminal_state_sends_immediate_progress_update(tmp_path: Path)
         assert any(event["event"] == "external_terminal_progress_sent" for event in events)
     finally:
         server.shutdown()
+
+
+def test_fresh_agent_heartbeat_keeps_item_running_without_duplicate_launch(tmp_path: Path) -> None:
+    heartbeat_path = tmp_path / "agent-heartbeat.json"
+    marker_path = tmp_path / "should-not-run.txt"
+    backlog_path = tmp_path / "backlog.json"
+    heartbeat_path.write_text(
+        json.dumps(
+            {
+                "schema": "agora-agent-heartbeat-v1",
+                "link_id": "link-worker",
+                "agent_role": "coder",
+                "gap_id": "ITEM-001",
+                "phase": "running_tests",
+                "last_action": "Running targeted tests.",
+                "blocked": False,
+                "blocked_reason": "",
+                "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    backlog_path.write_text(
+        json.dumps(
+            {
+                "schema": "durable-watchdog-backlog-v1",
+                "project_name": "Heartbeat Fresh Test",
+                "project_root": str(tmp_path),
+                "goal": "Fresh worker heartbeat suppresses duplicate launch.",
+                "status": "running",
+                "notification": {"mode": "None", "telegram_bridge": "", "repeat_alert_minutes": 120},
+                "supervisor": {
+                    "interval_seconds": 300,
+                    "max_retries_per_item": 3,
+                    "event_log": "events.jsonl",
+                    "state_file": "supervisor-state.json",
+                },
+                "final_validation_command": "exit 0",
+                "items": [
+                    {
+                        "id": "ITEM-001",
+                        "description": "Worker is already active.",
+                        "required": True,
+                        "status": "running",
+                        "attempts": 1,
+                        "run_command": f"Set-Content -LiteralPath '{marker_path}' -Value 'ran'",
+                        "check_command": "exit 1",
+                        "recover_command": "",
+                        "heartbeat_tracking": {
+                            "enabled": True,
+                            "heartbeat_file": str(heartbeat_path),
+                            "stale_after_seconds": 300,
+                        },
+                        "evidence": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_supervisor(backlog_path)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    updated = json.loads(backlog_path.read_text(encoding="utf-8"))
+    assert updated["status"] == "running"
+    assert updated["items"][0]["status"] == "running"
+    assert updated["items"][0]["last_heartbeat_phase"] == "running_tests"
+    assert not marker_path.exists()
+    events = [json.loads(line) for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert any(event["event"] == "heartbeat_fresh" for event in events)
+
+
+def test_blocked_agent_heartbeat_marks_item_blocked(tmp_path: Path) -> None:
+    heartbeat_path = tmp_path / "agent-heartbeat.json"
+    backlog_path = tmp_path / "backlog.json"
+    heartbeat_path.write_text(
+        json.dumps(
+            {
+                "schema": "agora-agent-heartbeat-v1",
+                "link_id": "link-worker",
+                "agent_role": "validator",
+                "gap_id": "ITEM-001",
+                "phase": "blocked",
+                "last_action": "Cannot read the diff.",
+                "blocked": True,
+                "blocked_reason": "diff file missing",
+                "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    backlog_path.write_text(
+        json.dumps(
+            {
+                "schema": "durable-watchdog-backlog-v1",
+                "project_name": "Heartbeat Blocked Test",
+                "project_root": str(tmp_path),
+                "goal": "Blocked worker heartbeat blocks item.",
+                "status": "running",
+                "notification": {"mode": "None", "telegram_bridge": "", "repeat_alert_minutes": 120},
+                "supervisor": {
+                    "interval_seconds": 300,
+                    "max_retries_per_item": 3,
+                    "event_log": "events.jsonl",
+                    "state_file": "supervisor-state.json",
+                },
+                "final_validation_command": "exit 0",
+                "items": [
+                    {
+                        "id": "ITEM-001",
+                        "description": "Worker reports blocked.",
+                        "required": True,
+                        "status": "running",
+                        "attempts": 1,
+                        "run_command": "Write-Output 'should not run'",
+                        "check_command": "exit 1",
+                        "recover_command": "",
+                        "heartbeat_tracking": {
+                            "enabled": True,
+                            "heartbeat_file": str(heartbeat_path),
+                            "stale_after_seconds": 300,
+                        },
+                        "evidence": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_supervisor(backlog_path)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    updated = json.loads(backlog_path.read_text(encoding="utf-8"))
+    assert updated["status"] == "blocked"
+    assert updated["items"][0]["status"] == "blocked"
+    assert "diff file missing" in updated["items"][0]["last_error"]
+    assert updated["items"][0]["evidence"][-1]["type"] == "agent_heartbeat_blocked"

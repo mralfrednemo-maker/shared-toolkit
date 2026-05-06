@@ -32,6 +32,7 @@ Every supervised project needs:
 6. Durable event logs.
 7. Optional routine progress updates when the user explicitly asks for them.
 8. Optional machine-readable external state when another tool, dialogue runner, or validator owns final verdicts.
+9. Optional agent heartbeat tracking when long-running workers need to prove they are still active.
 
 ## Files
 
@@ -71,6 +72,44 @@ Example:
 If the external status is in `done_statuses`, the item is marked `done` without rerunning recovery. If it is in `blocked_statuses`, the item is marked `blocked` and the backlog status becomes `blocked`. If it is `running` or `waiting`, the supervisor records that state and avoids duplicate launches for that poll.
 
 When `progress_updates.enabled` is true, terminal external states also produce an immediate progress message by default, independent of the normal progress interval. This prevents a completed or rejected validator/dialogue state from sitting unseen until the next periodic status update. Set `"external_terminal_updates": false` under `progress_updates` to suppress that immediate terminal progress message.
+
+## Agent Heartbeat Tracking
+
+For long-running coder, validator, reviewer, or browser workers, add a heartbeat file that the supervisor can read while the worker is still busy. This answers "is the worker still doing anything?" without sending another chat prompt.
+
+Heartbeat JSON shape:
+
+```json
+{
+  "schema": "agora-agent-heartbeat-v1",
+  "link_id": "link-...",
+  "agent_role": "validator",
+  "gap_id": "GAP-006",
+  "phase": "running_tests",
+  "last_action": "Running targeted tests.",
+  "blocked": false,
+  "blocked_reason": "",
+  "updated_at": "2026-05-06T10:00:00Z"
+}
+```
+
+Backlog item configuration:
+
+```json
+"heartbeat_tracking": {
+  "enabled": true,
+  "heartbeat_file": "agent-heartbeat.json",
+  "stale_after_seconds": 300
+}
+```
+
+Fresh heartbeat behavior: the item stays `running`, the supervisor logs `heartbeat_fresh`, and duplicate launches are suppressed for that poll. Blocked heartbeat behavior: the item becomes `blocked`, evidence is recorded, and an action-required alert is sent. Stale or missing heartbeat is not treated as proof of failure by itself; the supervisor falls back to normal check/retry/recovery rules and records `heartbeat_stale` or `heartbeat_missing`.
+
+For Agora inbox workers, use:
+
+```powershell
+python C:\Users\chris\PROJECTS\agora\scripts\agora_inbox.py process-once --to-link link-... --agent-role validator --gap-id GAP-006 --heartbeat-interval 120
+```
 
 ## How To Use
 
@@ -121,13 +160,13 @@ When `progress_updates.enabled` is true, terminal external states also produce a
    "progress_updates": {
      "enabled": true,
      "interval_seconds": 900,
-     "summary_command": "Write-Output 'Sentence one. Sentence two. Sentence three.'",
+     "summary_command": "Write-Output 'Sentence one. Sentence two. Sentence three. RUNNING AS PLANNED'",
      "state_file": "progress-state.json",
      "external_terminal_updates": true
    }
    ```
 
-   The summary command should return exactly the human-facing status text to send, ideally three short sentences every 15 minutes. External terminal updates are separate from the interval and are deduped by item/status/action.
+   The summary command should return exactly the human-facing status text to send, ideally three short sentences every 15 minutes. End the message with a final controller verdict in all caps, maximum three words, for example `RUNNING AS PLANNED`, `PROGRESSING WITH DELAY`, or `NOT RUNNING NORMALLY`. If the controller is not running normally, use the last sentence before the verdict to state the reason and next action briefly. External terminal updates are separate from the interval and are deduped by item/status/action.
 
 ## Quality Gates
 
@@ -162,5 +201,5 @@ Expected result: backlog status becomes `complete`, the item status becomes `don
 - Do not rely on chat memory.
 - Do not use a checklist only in the conversation.
 - Do not mark work done without a machine-checkable command or explicit evidence.
-- Do not send routine Telegram progress unless the user explicitly asks. If they do ask, use `progress_updates` and keep it brief.
+- Do not send routine Telegram progress unless the user explicitly asks. If they do ask, use `progress_updates`, keep it brief, and end with the all-caps controller verdict convention above.
 - Do not auto-resolve destructive conflicts unless the rule is deterministic and logged.

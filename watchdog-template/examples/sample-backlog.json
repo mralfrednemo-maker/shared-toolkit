@@ -12,6 +12,13 @@
     "telegram_bridge": "http://127.0.0.1:9788/agora/send",
     "repeat_alert_minutes": 120
   },
+  "progress_updates": {
+    "enabled": false,
+    "interval_seconds": 900,
+    "summary_command": "Write-Output 'Sentence one. Sentence two. Sentence three. RUNNING AS PLANNED'",
+    "state_file": "progress-state.json",
+    "external_terminal_updates": true
+  },
   "supervisor": {
     "interval_seconds": 300,
     "stalled_after_minutes": 45,

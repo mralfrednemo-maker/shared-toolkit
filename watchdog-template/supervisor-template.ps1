@@ -420,6 +420,103 @@ function Get-StateFilePath {
   return (Join-Path $BacklogDir $stateFile)
 }
 
+function Get-HeartbeatFilePath {
+  param(
+    [hashtable]$Tracking
+  )
+  $heartbeatFile = [string](Get-ConfigValue $Tracking "heartbeat_file" "")
+  if (-not $heartbeatFile.Trim()) { return "" }
+  if ([System.IO.Path]::IsPathRooted($heartbeatFile)) { return $heartbeatFile }
+  return (Join-Path $BacklogDir $heartbeatFile)
+}
+
+function Read-AgentHeartbeat {
+  param(
+    [hashtable]$Backlog,
+    [hashtable]$Item
+  )
+  $tracking = Get-ConfigValue $Item "heartbeat_tracking" @{}
+  if (-not [bool](Get-ConfigValue $tracking "enabled" $false)) {
+    return @{ handled = $false; action = "disabled" }
+  }
+
+  $heartbeatPath = Get-HeartbeatFilePath $tracking
+  if (-not $heartbeatPath.Trim() -or -not (Test-Path -LiteralPath $heartbeatPath)) {
+    Write-Event $Backlog @{ event = "heartbeat_missing"; item_id = $Item.id; heartbeat_file = $heartbeatPath }
+    return @{ handled = $false; action = "missing"; heartbeat_file = $heartbeatPath }
+  }
+
+  try {
+    $heartbeat = ConvertTo-Hashtable ((Get-Content -LiteralPath $heartbeatPath -Raw) | ConvertFrom-Json)
+  } catch {
+    Write-Event $Backlog @{ event = "heartbeat_invalid"; item_id = $Item.id; heartbeat_file = $heartbeatPath; error = $_.Exception.Message }
+    return @{ handled = $false; action = "invalid"; heartbeat_file = $heartbeatPath }
+  }
+
+  $updatedAtText = [string](Get-ConfigValue $heartbeat "updated_at" "")
+  if (-not $updatedAtText.Trim()) {
+    Write-Event $Backlog @{ event = "heartbeat_invalid"; item_id = $Item.id; heartbeat_file = $heartbeatPath; error = "missing updated_at" }
+    return @{ handled = $false; action = "invalid"; heartbeat_file = $heartbeatPath }
+  }
+
+  try {
+    $updatedAt = [DateTimeOffset]::Parse($updatedAtText)
+  } catch {
+    Write-Event $Backlog @{ event = "heartbeat_invalid"; item_id = $Item.id; heartbeat_file = $heartbeatPath; error = "invalid updated_at" }
+    return @{ handled = $false; action = "invalid"; heartbeat_file = $heartbeatPath }
+  }
+
+  $staleAfterSeconds = [int](Get-ConfigValue $tracking "stale_after_seconds" 300)
+  $ageSeconds = ([DateTimeOffset]::UtcNow - $updatedAt).TotalSeconds
+  $phase = [string](Get-ConfigValue $heartbeat "phase" "")
+  $lastAction = [string](Get-ConfigValue $heartbeat "last_action" "")
+  $blocked = [bool](Get-ConfigValue $heartbeat "blocked" $false)
+  $blockedReason = [string](Get-ConfigValue $heartbeat "blocked_reason" "")
+
+  $Item["last_heartbeat_at"] = $updatedAtText
+  $Item["last_heartbeat_phase"] = $phase
+  $Item["last_heartbeat_action"] = $lastAction
+  $Item["last_heartbeat_age_seconds"] = [int]$ageSeconds
+
+  if ($blocked) {
+    $Item["status"] = "blocked"
+    $Item["last_error"] = if ($blockedReason.Trim()) { "blocked by agent heartbeat: $blockedReason" } else { "blocked by agent heartbeat" }
+    $evidence = @($Item["evidence"])
+    $evidence += @{
+      ts = [DateTimeOffset]::UtcNow.ToString("o")
+      type = "agent_heartbeat_blocked"
+      heartbeat_file = $heartbeatPath
+      phase = $phase
+      blocked_reason = $blockedReason
+    }
+    $Item["evidence"] = $evidence
+    return @{ handled = $true; action = "blocked"; phase = $phase; age_seconds = [int]$ageSeconds; heartbeat_file = $heartbeatPath }
+  }
+
+  if ($ageSeconds -le $staleAfterSeconds) {
+    $Item["status"] = "running"
+    Write-Event $Backlog @{
+      event = "heartbeat_fresh"
+      item_id = $Item.id
+      heartbeat_file = $heartbeatPath
+      phase = $phase
+      age_seconds = [int]$ageSeconds
+    }
+    return @{ handled = $true; action = "running"; phase = $phase; age_seconds = [int]$ageSeconds; heartbeat_file = $heartbeatPath }
+  }
+
+  $Item["last_error"] = "agent heartbeat stale for $([int]$ageSeconds) seconds"
+  Write-Event $Backlog @{
+    event = "heartbeat_stale"
+    item_id = $Item.id
+    heartbeat_file = $heartbeatPath
+    phase = $phase
+    age_seconds = [int]$ageSeconds
+    stale_after_seconds = $staleAfterSeconds
+  }
+  return @{ handled = $false; action = "stale"; phase = $phase; age_seconds = [int]$ageSeconds; heartbeat_file = $heartbeatPath }
+}
+
 function Invoke-ExternalStateTracking {
   param(
     [hashtable]$Backlog,
@@ -537,6 +634,15 @@ function Invoke-SupervisorIteration {
       }
       if ([string]$external.action -eq "blocked") {
         Send-Alert $backlog "action_required" "Backlog item $($item.id) is blocked by external state: $($external.status)" "external-blocked-$($item.id)"
+      }
+      continue
+    }
+
+    $heartbeat = Read-AgentHeartbeat -Backlog $backlog -Item $item
+    if ([bool]$heartbeat.handled) {
+      Write-Event $backlog @{ event = "heartbeat_state_applied"; item_id = $item.id; action = $heartbeat.action; phase = $heartbeat.phase; age_seconds = $heartbeat.age_seconds }
+      if ([string]$heartbeat.action -eq "blocked") {
+        Send-Alert $backlog "action_required" "Backlog item $($item.id) is blocked by agent heartbeat: $($item.last_error)" "heartbeat-blocked-$($item.id)"
       }
       continue
     }

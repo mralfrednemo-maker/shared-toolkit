@@ -15,8 +15,9 @@
   "progress_updates": {
     "enabled": false,
     "interval_seconds": 900,
-    "summary_command": "",
-    "state_file": "progress-state.json"
+    "summary_command": "Write-Output 'Sentence one. Sentence two. Sentence three. RUNNING AS PLANNED'",
+    "state_file": "progress-state.json",
+    "external_terminal_updates": true
   },
   "supervisor": {
     "interval_seconds": 300,
@@ -44,6 +45,11 @@
         "blocked_statuses": ["blocked", "blocked_needs_human", "rejected", "failed", "failed_safely"],
         "running_statuses": ["running", "in_progress"],
         "waiting_statuses": ["waiting", "pending", "queued"]
+      },
+      "heartbeat_tracking": {
+        "enabled": false,
+        "heartbeat_file": "agent-heartbeat.json",
+        "stale_after_seconds": 300
       },
       "last_started_at": null,
       "last_checked_at": null,
