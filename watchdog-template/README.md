@@ -92,13 +92,22 @@ When `progress_updates.enabled` is true, terminal external states also produce a
 3. Start the supervisor:
 
    ```powershell
-   Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
+   function Quote-ProcessArgument {
+     param([string]$Value)
+     if ($null -eq $Value) { return '""' }
+     return '"' + ($Value -replace '(\\*)"', '$1$1\"') + '"'
+   }
+
+   $watchdogArgs = @(
      '-NoProfile',
      '-ExecutionPolicy','Bypass',
      '-File','C:\Users\chris\PROJECTS\shared\watchdog-template\supervisor-template.ps1',
      '-BacklogPath','C:\path\to\project\supervisor-backlog.json'
    )
+   Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList (($watchdogArgs | ForEach-Object { Quote-ProcessArgument ([string]$_) }) -join ' ')
    ```
+
+   On Windows PowerShell, avoid passing a raw string array directly to `Start-Process -ArgumentList` when any value can contain spaces. PowerShell can flatten the array into an unquoted command line and shift later parameters into the wrong bindings.
 
 4. Inspect logs:
 

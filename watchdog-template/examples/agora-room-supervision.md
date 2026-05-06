@@ -9,12 +9,22 @@ Agora already has project-specific watchdogs:
 
 Use the generic template when building the same pattern into another project.
 
+These examples use the quoted-launch pattern because room ids, paths, and subjects often contain characters that must stay bound to a single parameter.
+
+```powershell
+function Quote-ProcessArgument {
+  param([string]$Value)
+  if ($null -eq $Value) { return '""' }
+  return '"' + ($Value -replace '(\\*)"', '$1$1\"') + '"'
+}
+```
+
 ## Current Agora Pattern
 
 Dense monitor:
 
 ```powershell
-Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
+$denseArgs = @(
   '-NoProfile','-ExecutionPolicy','Bypass',
   '-File','C:\Users\chris\PROJECTS\agora\scripts\watch_code_audit_loop.ps1',
   '-RoomId','<ROOM_ID>',
@@ -22,12 +32,13 @@ Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
   '-Iterations','96',
   '-Gateway','http://127.0.0.1:8890'
 )
+Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList (($denseArgs | ForEach-Object { Quote-ProcessArgument ([string]$_) }) -join ' ')
 ```
 
 Action-required watchdog:
 
 ```powershell
-Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
+$watchdogArgs = @(
   '-NoProfile','-ExecutionPolicy','Bypass',
   '-File','C:\Users\chris\PROJECTS\agora\scripts\agora_watchdog.ps1',
   '-RoomId','<ROOM_ID>',
@@ -38,12 +49,13 @@ Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
   '-TelegramMode','ActionRequired',
   '-RecoveryScript','C:\Users\chris\PROJECTS\agora\scripts\agora_recovery_agent.ps1'
 )
+Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList (($watchdogArgs | ForEach-Object { Quote-ProcessArgument ([string]$_) }) -join ' ')
 ```
 
 Cadence gate:
 
 ```powershell
-Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
+$gateArgs = @(
   '-NoProfile','-ExecutionPolicy','Bypass',
   '-File','C:\Users\chris\PROJECTS\agora\scripts\agora_watchdog_cadence_gate.ps1',
   '-RoomId','<ROOM_ID>',
@@ -56,6 +68,7 @@ Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList @(
   '-RecoveryScript','C:\Users\chris\PROJECTS\agora\scripts\agora_recovery_agent.ps1',
   '-TelegramMode','ActionRequired'
 )
+Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList (($gateArgs | ForEach-Object { Quote-ProcessArgument ([string]$_) }) -join ' ')
 ```
 
 ## What To Copy To Other Projects
