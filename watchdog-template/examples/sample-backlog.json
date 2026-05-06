@@ -1,0 +1,49 @@
+{
+  "schema": "durable-watchdog-backlog-v1",
+  "project_name": "Watchdog Template Sample",
+  "project_root": "C:\\Users\\chris\\PROJECTS\\shared\\watchdog-template",
+  "goal": "Prove that the generic supervisor can mark a checked item done and close the backlog.",
+  "status": "running",
+  "created_at": null,
+  "updated_at": null,
+  "completed_at": null,
+  "notification": {
+    "mode": "None",
+    "telegram_bridge": "http://127.0.0.1:9788/agora/send",
+    "repeat_alert_minutes": 120
+  },
+  "supervisor": {
+    "interval_seconds": 300,
+    "stalled_after_minutes": 45,
+    "max_retries_per_item": 3,
+    "event_log": "supervisor-events.jsonl",
+    "state_file": "supervisor-state.json"
+  },
+  "final_validation_command": "if (Test-Path -LiteralPath 'README.md') { exit 0 } else { exit 1 }",
+  "items": [
+    {
+      "id": "SAMPLE-001",
+      "description": "README exists in the template folder.",
+      "required": true,
+      "status": "pending",
+      "attempts": 0,
+      "run_command": "Write-Output 'No run needed; check command proves this sample item.'",
+      "check_command": "if (Test-Path -LiteralPath 'README.md') { exit 0 } else { exit 1 }",
+      "recover_command": "",
+      "state_tracking": {
+        "enabled": false,
+        "state_file": "dialogue-state.json",
+        "status_path": ["items", "SAMPLE-001", "status"],
+        "done_statuses": ["done", "closed_accepted", "closed_accepted_with_notes"],
+        "blocked_statuses": ["blocked", "blocked_needs_human", "rejected", "failed", "failed_safely"],
+        "running_statuses": ["running", "in_progress"],
+        "waiting_statuses": ["waiting", "pending", "queued"]
+      },
+      "last_started_at": null,
+      "last_checked_at": null,
+      "last_finished_at": null,
+      "last_error": null,
+      "evidence": []
+    }
+  ]
+}
