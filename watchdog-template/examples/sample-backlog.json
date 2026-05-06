@@ -46,6 +46,11 @@
         "running_statuses": ["running", "in_progress"],
         "waiting_statuses": ["waiting", "pending", "queued"]
       },
+      "heartbeat_tracking": {
+        "enabled": false,
+        "heartbeat_file": "agent-heartbeat.json",
+        "stale_after_seconds": 300
+      },
       "last_started_at": null,
       "last_checked_at": null,
       "last_finished_at": null,

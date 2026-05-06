@@ -77,6 +77,16 @@ When `progress_updates.enabled` is true, terminal external states also produce a
 
 For long-running coder, validator, reviewer, or browser workers, add a heartbeat file that the supervisor can read while the worker is still busy. This answers "is the worker still doing anything?" without sending another chat prompt.
 
+Use heartbeat tracking when the main failure mode is operational ambiguity:
+
+- the worker may be actively busy inside one long wake;
+- the transcript may stay quiet for minutes at a time;
+- the supervisor must distinguish "still working" from "hung, silent, or never woke".
+
+The practical question heartbeat answers is:
+
+> Are we waiting on real work, or are we waiting for nothing?
+
 Heartbeat JSON shape:
 
 ```json
@@ -105,11 +115,28 @@ Backlog item configuration:
 
 Fresh heartbeat behavior: the item stays `running`, the supervisor logs `heartbeat_fresh`, and duplicate launches are suppressed for that poll. Blocked heartbeat behavior: the item becomes `blocked`, evidence is recorded, and an action-required alert is sent. Stale or missing heartbeat is not treated as proof of failure by itself; the supervisor falls back to normal check/retry/recovery rules and records `heartbeat_stale` or `heartbeat_missing`.
 
+That gives the supervisor four useful operational states:
+
+- `fresh`: the worker is alive and recently reported progress;
+- `blocked`: the worker is alive and explicitly needs help;
+- `stale`: the worker was alive before, but has stopped reporting within the allowed window;
+- `missing`: the worker never produced the expected heartbeat file, so the supervisor must rely on normal recovery rules.
+
+If the user asks "is the run hanging?", a healthy heartbeat lets you answer `no` with evidence: role, gap/task id, phase, last action, and heartbeat age. If heartbeat goes stale, you can answer `probably yes` or `needs recovery` instead of waiting blindly.
+
 For Agora inbox workers, use:
 
 ```powershell
 python C:\Users\chris\PROJECTS\agora\scripts\agora_inbox.py process-once --to-link link-... --agent-role validator --gap-id GAP-006 --heartbeat-interval 120
 ```
+
+Minimum setup checklist:
+
+1. Enable `heartbeat_tracking` on the backlog item.
+2. Make the worker write a heartbeat at a fixed cadence while it is busy.
+3. Include `agent_role`, a task id such as `gap_id`, `phase`, and `last_action`.
+4. Pick `stale_after_seconds` shorter than the point where a human would ask whether the worker is hung.
+5. Verify one fresh heartbeat, one blocked heartbeat, and one stale heartbeat case before relying on the setup unattended.
 
 ## How To Use
 
@@ -179,6 +206,7 @@ Before claiming unattended supervision works, verify:
 - a passing check marks an item `done`;
 - external state can mark an item `done` or `blocked` without duplicate recovery;
 - external terminal state emits an immediate `external_terminal_progress_sent` event when progress updates are enabled;
+- heartbeat tracking can distinguish `fresh`, `blocked`, and `stale` worker states for at least one supervised item;
 - final validation controls the global `complete` state;
 - Telegram sends only action-required messages in `ActionRequired` mode.
 - If routine progress is enabled, progress text arrives at the requested cadence and stays concise.
