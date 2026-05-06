@@ -138,6 +138,15 @@ Minimum setup checklist:
 4. Pick `stale_after_seconds` shorter than the point where a human would ask whether the worker is hung.
 5. Verify one fresh heartbeat, one blocked heartbeat, and one stale heartbeat case before relying on the setup unattended.
 
+Role/backend switch checklist:
+
+1. Treat heartbeat ownership as belonging to the worker link or session, not to the model brand.
+2. If the same live link/session stays in use and only the backend command or model changes, keep the heartbeat file path and run a health-check prompt before resuming.
+3. If the role moves to a new terminal, link, inbox, or session, update the supervisor item and any project launcher/config with the new worker id, transcript path, and heartbeat path.
+4. Reset stale heartbeat state after a worker replacement so old timestamps cannot be mistaken for fresh progress from the new worker.
+5. Require a handshake before unattended work resumes: the new worker must answer, write a fresh heartbeat with the expected `agent_role` and task id, and the supervisor must report that heartbeat as fresh.
+6. Record the switch in the event log or run notes with previous worker id, new worker id, backend/model command, time, and reason.
+
 ## How To Use
 
 1. Copy `backlog-template.json` into the project, for example:
