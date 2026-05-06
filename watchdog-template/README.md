@@ -195,12 +195,26 @@ Minimum setup checklist:
 
    The summary command should return exactly the human-facing status text to send, ideally three short sentences every 15 minutes. End the message with a final controller verdict in all caps, maximum three words, for example `RUNNING AS PLANNED`, `PROGRESSING WITH DELAY`, or `NOT RUNNING NORMALLY`. If the controller is not running normally, use the last sentence before the verdict to state the reason and next action briefly. External terminal updates are separate from the interval and are deduped by item/status/action.
 
+## Status Probes And Ownership
+
+One-shot status probes must be observers, not supervisor owners. If a project wraps this template with its own PID file, lock file, launcher, or leader-election rule, only the durable long-running supervisor should claim that ownership record.
+
+Operational rule:
+
+- persistent supervisor run: may claim or refresh the PID/lock owner;
+- `-Once`, dry-run, status-only, or diagnostic probe: must not claim PID/lock ownership;
+- launcher probe: must not replace a live owner unless the user explicitly asked to restart the supervisor;
+- `NoReplaceExisting` behavior should return the live owner instead of spawning a competing supervisor.
+
+This prevents a manual "show me status" probe from causing the real unattended supervisor to exit because it thinks it has been replaced.
+
 ## Quality Gates
 
 Before claiming unattended supervision works, verify:
 
 - supervisor process PID exists;
 - duplicate launch protection works through the `.lock.json` file;
+- one-shot status probes do not replace or supersede the durable supervisor owner;
 - event log receives fresh `poll` events;
 - a deliberately failing check produces `blocked` or alert behavior;
 - a passing check marks an item `done`;
