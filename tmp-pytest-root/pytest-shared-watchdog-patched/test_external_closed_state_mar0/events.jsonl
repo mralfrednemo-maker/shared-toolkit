@@ -1,0 +1,5 @@
+{"status":"running","event":"poll","ts":"2026-05-06T09:31:56.5385747+00:00"}
+{"ts":"2026-05-06T09:31:56.6125241+00:00","status":"closed_accepted","item_id":"ITEM-001","event":"external_state_applied","action":"done"}
+{"status":"closed_accepted","item_id":"ITEM-001","reason":"progress_disabled","event":"external_terminal_progress_suppressed","ts":"2026-05-06T09:31:56.6201039+00:00"}
+{"output":"","ts":"2026-05-06T09:31:56.8970341+00:00","event":"final_validation","exit_code":0}
+{"event":"supervisor_complete","ts":"2026-05-06T09:31:56.9015455+00:00"}

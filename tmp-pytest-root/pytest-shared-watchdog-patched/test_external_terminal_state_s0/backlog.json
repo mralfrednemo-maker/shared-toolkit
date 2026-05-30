@@ -1,0 +1,65 @@
+{
+    "supervisor":  {
+                       "state_file":  "supervisor-state.json",
+                       "max_retries_per_item":  3,
+                       "event_log":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_terminal_state_s0\\events.jsonl",
+                       "interval_seconds":  300
+                   },
+    "updated_at":  "2026-05-06T09:31:59.0274467+00:00",
+    "created_at":  "2026-05-06T09:31:57.9614058+00:00",
+    "goal":  "Prove terminal external state is visible immediately.",
+    "notification":  {
+                         "repeat_alert_minutes":  120,
+                         "telegram_bridge":  "http://127.0.0.1:25894/send",
+                         "mode":  "ActionRequired"
+                     },
+    "project_name":  "Immediate Terminal Test",
+    "schema":  "durable-watchdog-backlog-v1",
+    "final_validation_command":  "exit 0",
+    "progress_updates":  {
+                             "summary_command":  "Write-Output \u0027periodic only\u0027",
+                             "state_file":  "progress-state.json",
+                             "external_terminal_updates":  true,
+                             "interval_seconds":  900,
+                             "enabled":  true
+                         },
+    "completed_at":  "2026-05-06T09:31:59.0264473+00:00",
+    "items":  [
+                  {
+                      "run_command":  "Write-Output \u0027should not run\u0027",
+                      "id":  "ITEM-001",
+                      "check_command":  "exit 1",
+                      "recover_command":  "",
+                      "description":  "Already accepted externally.",
+                      "state_tracking":  {
+                                             "state_file":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_terminal_state_s0\\dialogue-state.json",
+                                             "status_path":  [
+                                                                 "items",
+                                                                 "ITEM-001",
+                                                                 "status"
+                                                             ],
+                                             "blocked_statuses":  [
+                                                                      "rejected"
+                                                                  ],
+                                             "done_statuses":  [
+                                                                   "closed_accepted"
+                                                               ],
+                                             "enabled":  true
+                                         },
+                      "last_finished_at":  "2026-05-06T09:31:58.7531684+00:00",
+                      "evidence":  [
+                                       {
+                                           "state_file":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_terminal_state_s0\\dialogue-state.json",
+                                           "status":  "closed_accepted",
+                                           "type":  "external_state_terminal",
+                                           "ts":  "2026-05-06T09:31:58.7521706+00:00"
+                                       }
+                                   ],
+                      "attempts":  0,
+                      "status":  "done",
+                      "required":  true
+                  }
+              ],
+    "status":  "complete",
+    "project_root":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_terminal_state_s0"
+}

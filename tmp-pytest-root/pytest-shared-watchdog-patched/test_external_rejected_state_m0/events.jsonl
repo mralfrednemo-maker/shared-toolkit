@@ -1,0 +1,5 @@
+{"status":"running","event":"poll","ts":"2026-05-06T09:31:57.3745592+00:00"}
+{"ts":"2026-05-06T09:31:57.4504040+00:00","status":"rejected","item_id":"ITEM-001","event":"external_state_applied","action":"blocked"}
+{"status":"rejected","item_id":"ITEM-001","reason":"progress_disabled","event":"external_terminal_progress_suppressed","ts":"2026-05-06T09:31:57.4581477+00:00"}
+{"message":"Backlog item ITEM-001 is blocked by external state: rejected","key":"external-blocked-ITEM-001","ts":"2026-05-06T09:31:57.4671471+00:00","severity":"action_required","event":"alert_suppressed","mode":"None"}
+{"iteration":1,"reason":"iteration_limit","event":"supervisor_exit","ts":"2026-05-06T09:31:57.4736626+00:00"}

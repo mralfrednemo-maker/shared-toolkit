@@ -1,0 +1,57 @@
+{
+    "notification":  {
+                         "repeat_alert_minutes":  120,
+                         "telegram_bridge":  "",
+                         "mode":  "None"
+                     },
+    "updated_at":  "2026-05-06T09:31:57.4706611+00:00",
+    "final_validation_command":  "exit 0",
+    "items":  [
+                  {
+                      "run_command":  "Write-Output \u0027should not run\u0027",
+                      "id":  "ITEM-001",
+                      "check_command":  "exit 1",
+                      "recover_command":  "",
+                      "description":  "Rejected externally.",
+                      "state_tracking":  {
+                                             "state_file":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_rejected_state_m0\\dialogue-state.json",
+                                             "status_path":  [
+                                                                 "items",
+                                                                 "ITEM-001",
+                                                                 "status"
+                                                             ],
+                                             "blocked_statuses":  [
+                                                                      "rejected"
+                                                                  ],
+                                             "done_statuses":  [
+                                                                   "closed_accepted"
+                                                               ],
+                                             "enabled":  true
+                                         },
+                      "evidence":  [
+                                       {
+                                           "state_file":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_rejected_state_m0\\dialogue-state.json",
+                                           "status":  "rejected",
+                                           "type":  "external_state_terminal",
+                                           "ts":  "2026-05-06T09:31:57.4458934+00:00"
+                                       }
+                                   ],
+                      "attempts":  0,
+                      "status":  "blocked",
+                      "last_error":  "blocked by external state \u0027rejected\u0027",
+                      "required":  true
+                  }
+              ],
+    "goal":  "Prove rejected external state blocks item.",
+    "project_root":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_rejected_state_m0",
+    "created_at":  "2026-05-06T09:31:57.3665497+00:00",
+    "supervisor":  {
+                       "state_file":  "supervisor-state.json",
+                       "max_retries_per_item":  3,
+                       "event_log":  "events.jsonl",
+                       "interval_seconds":  300
+                   },
+    "schema":  "durable-watchdog-backlog-v1",
+    "status":  "blocked",
+    "project_name":  "External Blocked Test"
+}

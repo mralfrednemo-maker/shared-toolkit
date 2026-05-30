@@ -1,0 +1,18 @@
+{
+    "schema":  "ralph-observer-state-v1",
+    "checked_at":  "2026-05-26T21:59:44.8471991+00:00",
+    "backlog_path":  "C:\\Users\\chris\\PROJECTS\\shared\\watchdog-template\\backlog-template.json",
+    "observer_enabled":  false,
+    "mode":  "passive",
+    "status":  "PASSIVE_OBSERVER_DISABLED",
+    "terminal":  false,
+    "action_required":  false,
+    "action_taken":  "none",
+    "forbidden_actions_confirmed":  [
+                                        "guru_contact",
+                                        "codex_launch",
+                                        "session_wake",
+                                        "product_edit",
+                                        "authority_write"
+                                    ]
+}

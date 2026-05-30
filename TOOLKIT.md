@@ -1,6 +1,6 @@
 # Shared Toolkit — Mitso, Deus, Gemini, Codex & Claude Code
 **Location:** `C:\Users\chris\PROJECTS\shared\TOOLKIT.md` — canonical, single source of truth
-**Last updated:** 2026-04-17
+**Last updated:** 2026-05-07
 **Maintained by:** ALL agents. Any agent that discovers or adds a new tool updates this file immediately, then runs `qmd update shared && qmd embed shared`.
 
 ---
@@ -17,6 +17,44 @@ Question or research task?
 ├── Need 3 LLMs to co-write a document/spec? → Ein Design (**NOT manual cg+gg+cc**)
 └── Need to implement code? → cx (Codex)
 ```
+
+### Browser Verification Policy
+
+For browser/UI verification, prefer the workspace root Playwright setup from `C:\Users\chris\PROJECTS`: `npx playwright ...`. Use it for repeatable smoke tests, screenshots, console checks, local HTML checks, and desktop/mobile viewport evidence unless a repo has its own Playwright config.
+
+Use Chrome DevTools MCP only as the fallback or interactive inspection tool: quick live-page navigation, JavaScript evaluation, screenshots from the current browser state, or cases where writing a Playwright script would add unnecessary ceremony.
+
+### Browser Operation Decision Node
+
+| Browser task | Use first | Use when |
+|---|---|---|
+| AFS / AtFirstSite authenticated browser automation | `C:\Users\chris\PROJECTS\afs_web_app\scripts\BROWSER-AUTOMATION.md` | Any AtFirstSite/AFS browser task, Slack app setup via the AFS persistent Chrome profile, or login-preserving Playwright CDP operation |
+| Repeatable UI verification, screenshots, console checks, viewport checks | Root Playwright CLI / Playwright test | The result should be reproducible and easy to rerun from logs |
+| One-shot authenticated action with saved cookies | `mitso/browser-automation/navigate.js` | The action is short and can close the browser afterward |
+| Long stateful authenticated admin work | Live persistent browser (`live-browser.js` or Playwright CDP attach) | Login/session must survive across many agent actions, or the site has Cloudflare/bot checks |
+| Quick live-page inspection | Chrome DevTools MCP | Need current-page navigation, JavaScript evaluation, or screenshot with minimal setup |
+
+For AFS Browser Automation searches, the canonical handoff is `C:\Users\chris\PROJECTS\afs_web_app\scripts\BROWSER-AUTOMATION.md`. It documents the persistent Chrome + Playwright CDP approach, screenshot-first rule, and what not to do.
+
+Default rule: do not use Selenium for stateful authenticated website operation when Playwright can attach to or own a persistent Chrome profile. Selenium-owned browser lifecycles are more likely to close, lock, or corrupt the reusable session.
+
+### ChatGPT Thread Continuity Guard
+
+When the task refers to an existing ChatGPT discussion, the thread URL is required context. Phrases such as "continue the discussion", "same thread", "existing ChatGPT", "manual discussion", "submit findings to ChatGPT", "ask for its views", or "resume" mean: do not start a fresh ChatGPT thread.
+
+Before calling ChatGPT for an existing discussion:
+
+1. Search for a task-specific thread lock: `chatgpt-thread-url.txt`, `.chatgpt-thread-url`, `*chatgpt*thread*.txt`, or a run-state field named `chatgpt_thread_url`.
+2. If no URL is found, stop and ask the operator for the existing ChatGPT URL.
+3. Use the guarded persistent-CDP wrapper. Do not use Selenium or `test_chatgpt_upload.py` for orchestration/audit ChatGPT consultation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\Users\chris\PROJECTS\scripts\invoke-chatgpt-heavy.ps1 -ThreadUrlFile C:\path\to\chatgpt-thread-url.txt -PromptFile C:\path\prompt.md -Output C:\path\response.md
+```
+
+Use `-AllowNewThread` only when the operator explicitly asks for a fresh thread or the run ledger explicitly requires one.
+
+For GECL/orchestration audit troubleshooting, use the run-configured CDP profile and port instead: `C:\Users\chris\PROJECTS\chrome-automation-profile-gecl-test-9227` on port `9227`, launched with `scripts\start-chatgpt-persistent-cdp.ps1` and driven by `scripts\chatgpt_persistent_cdp_client.py`, or use `agora\scripts\gecl_full_credibility_submit_gate_review.py`.
 
 ---
 
@@ -57,6 +95,18 @@ All browser/pipeline scripts are protected by `browser_safety.py` (`the-thinker/
 - Per-profile singleton locks prevent concurrent scripts sharing the same browser profile.
 - All scripts exit with code 1 on failure (not 0) so the caller knows to stop.
 - `--no-rate-limit` flag exists on all scripts for manual emergency override. Never use it programmatically.
+
+## EIN MDP Browser Keep-Open Launch
+
+Use these exact commands when the goal is to open the three MDP browsers, select the intended models, and leave the windows open for later submit:
+
+- `python the-thinker/ein/ein_preflight.py chatgpt --dry-run --load-only --model thinking-heavy --keep-open`
+- `python the-thinker/ein/ein_preflight.py claude --dry-run --load-only --model Sonnet --keep-open`
+- `python the-thinker/ein/ein_preflight.py gemini --dry-run --load-only --model Pro --keep-open`
+
+Important:
+- `--dry-run` is still required even with `--load-only`; without it, `ein_preflight.py` exits immediately by design.
+- These commands were live-verified on `2026-04-26` and successfully left all three browsers open on the correct models.
 
 ---
 
@@ -420,6 +470,48 @@ const USER_DATA_DIR = path.join(__dirname, 'profile');
 
 ---
 
+### Live Persistent Browser - authenticated web ops
+**What it does:** Keeps one visible Chrome session alive with a dedicated persistent profile while agents send many small actions to it. This is the preferred lane for Shopify, Vercel, Google, Hostinger, dashboards, admin panels, and other authenticated workflows where session continuity matters.
+
+**Use before:** Selenium, ad hoc Chrome launches, or Chrome DevTools MCP for multi-step authenticated admin work.
+
+**Two working patterns:**
+
+1. **Toolkit server:** `live-browser.js` launches a persistent Playwright Chrome context and exposes a small local HTTP action API.
+2. **Raw CDP attach:** launch Chrome independently with `--remote-debugging-port=9224` and a dedicated `--user-data-dir`, then attach with Playwright Python `connect_over_cdp("http://127.0.0.1:9224")`.
+
+**Start with the existing toolkit server:**
+
+```powershell
+cd C:\Users\chris\PROJECTS\mitso\browser-automation
+node live-browser.js --profile-dir "profiles/<site>" --channel chrome --url "https://target-site.com" --port 9224
+```
+
+**Then send actions without closing the browser:**
+
+```powershell
+Invoke-RestMethod -Method Get -Uri http://127.0.0.1:9224/status
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:9224/action -ContentType application/json -Body '{"type":"screenshot","path":"C:\\Users\\chris\\PROJECTS\\mitso\\browser-automation\\live-browser-screenshot.png","fullPage":true}'
+```
+
+**When to use:**
+- The user logs in manually and the agent must continue operating inside the same browser.
+- The site invalidates headless sessions, prompts for Cloudflare/bot checks, or loses state between fresh browser launches.
+- The workflow has many small steps: click, inspect, fill, wait, screenshot, verify, repeat.
+- You need cookies/localStorage to survive across script runs.
+
+**Rules:**
+- Use a dedicated profile per site: `profiles/<site>`.
+- Use installed Chrome with `--channel chrome` on this Windows machine.
+- Use one port per live browser; `9224` is the common CDP/admin-work port when free.
+- Never run two controllers against the same profile or port at once.
+- Do not close the live browser until the authenticated work is complete.
+- Use Playwright CLI afterward for repeatable verification when possible; use Chrome DevTools MCP only for lightweight inspection of current browser state.
+
+**Why not Selenium here:** Selenium/undetected-chromedriver often owns and closes the browser lifecycle. Leaving a Selenium-owned browser alive can also block the next automation run on the same profile. Use Selenium only for explicitly documented legacy/specialized scripts; never use it for ChatGPT consultation, ChatGPT Heavy, GECL authority reviews, or orchestration/audit troubleshooting.
+
+---
+
 ### Generic Browser Navigation — `navigate.js`
 **What it does:** Full headful/headless website navigation — click, fill, scroll, extract, change settings, open/close tabs. Mirrors the OpenClaw Kasm autonomous browser capability, but native Windows Playwright with a persistent profile. Write any interaction as a CLI command.
 
@@ -432,6 +524,16 @@ node setup-nav.js --url "https://target-site.com/login"
 # Headful browser opens. Log in manually. Close window.
 # Cookies saved to profile/ — reusable for all subsequent headless runs.
 ```
+
+#### Field Note: Logged-In Settings Work
+For authenticated admin panels where the user logs in manually and the agent must change settings, prefer this order:
+
+1. Use `setup-nav.js --profile-dir "profiles/<site>" --url "<login-or-target-url>"` for the human login. Have the user close the browser once authenticated so cookies are flushed to disk.
+2. Use `live-browser.js --profile-dir "profiles/<site>" --channel chrome --url "<target-url>" --port <port>` for the actual work when the site has Cloudflare, bot checks, multi-step settings, or stateful admin pages. This keeps one visible browser open and lets Codex inspect/click/fill without losing session state.
+3. Use `navigate.js --profile-dir "profiles/<site>" --headless false` for short deterministic actions, screenshots, and extraction. Use headless only after testing it; Hostinger served a Cloudflare gate in headless even though the same profile worked headfully.
+4. Use direct public checks outside the browser for verification when possible. Example: after DNS edits, `Resolve-DnsName -Type MX atfirstsite.app -Server 8.8.8.8` was clearer than waiting on vendor UI propagation messages.
+
+Practical lesson from the Hostinger/GoDaddy email-DNS session on 2026-05-06: `live-browser.js` with a dedicated profile was the best tool for logged-in website settings. `navigate.js` was useful for individual probes and short actions, but large batched JS/form actions could trip fragile admin-page postbacks. Chrome DevTools MCP should remain a fallback for lightweight inspection of current browser state, not the primary tool for this workflow.
 
 #### Navigation CLI
 ```bash
@@ -527,6 +629,8 @@ const USER_DATA_DIR = path.join(__dirname, 'profile');
 ### ChatGPT Full-Thread Dump — `dump_chatgpt_thread.py`
 **What it does:** Exports an entire ChatGPT conversation (all user + assistant turns, in order, with timestamps) to disk as JSON + Markdown. Orders of magnitude faster and cleaner than DOM scraping, and bypasses ChatGPT's UI virtualisation (which only renders turns that get scrolled into view).
 
+**Scope:** read-only transcript export only. Do not use this SeleniumBase path to chat with ChatGPT, submit prompts, upload files, continue orchestration/audit discussions, or handle GECL authority reviews. ChatGPT consultation uses the persistent Chrome CDP path in the `ChatGPT Thread Continuity Guard` above.
+
 **Location:** `C:\Users\chris\PROJECTS\shared\scripts\dump_chatgpt_thread.py`
 
 **Usage:**
@@ -584,9 +688,30 @@ python C:/Users/chris/PROJECTS/shared/scripts/dump_chatgpt_thread.py 69e0403b-04
 **What it does:** Sends prompt to ChatGPT in the browser, continues same thread. Returns response. Best for debate, idea testing, pushback, synthesis.
 
 **Commands:**
-```bash
+```powershell
 cg <prompt>              # Continue current thread
 cg new <prompt>          # Start fresh thread (new topic only)
+
+# Attachment / Heavy consults use the persistent-CDP wrapper:
+powershell -ExecutionPolicy Bypass -File C:/Users/chris/PROJECTS/scripts/invoke-chatgpt-heavy.ps1 `
+  -AllowNewThread `
+  -PromptFile C:/path/to/prompt.txt `
+  -Files C:/path/to/file1.py,C:/path/to/file2.py `
+  -Output C:/path/to/chatgpt-response.md
+
+# GECL/orchestration audit troubleshooting uses the run-configured CDP profile/port:
+powershell -ExecutionPolicy Bypass -File C:/Users/chris/PROJECTS/scripts/start-chatgpt-persistent-cdp.ps1 `
+  -ProfileDir C:/Users/chris/PROJECTS/chrome-automation-profile-gecl-test-9227 `
+  -Port 9227 `
+  -StateFile C:/Users/chris/PROJECTS/agora/data/orchestration-watchdog/gecl-chatgpt-cdp-state-9227.json
+python C:/Users/chris/PROJECTS/scripts/chatgpt_persistent_cdp_client.py `
+  --cdp-url http://127.0.0.1:9227 `
+  --mode send `
+  --thread-url-file C:/path/to/chatgpt-thread-url.txt `
+  --prompt-file C:/path/to/prompt.txt `
+  --file C:/path/to/file1.py `
+  --file C:/path/to/file2.py `
+  --output C:/path/to/chatgpt-response.md
 ```
 
 **Examples:**
@@ -599,6 +724,8 @@ cg new "Completely different topic: explain the Hayflick limit"
 - NEVER use `cg new` mid-topic — kills all context
 - Always push back on ChatGPT's answers — don't just accept them
 - Good for adversarial review and stress-testing ideas
+- Use the persistent-CDP wrapper/client, not Selenium or `test_chatgpt_upload.py`, when the consult needs file uploads, Heavy/Extended Thinking, a saved response, or an existing thread guarantee.
+- For generic ChatGPT Heavy calls, prefer `scripts\invoke-chatgpt-heavy.ps1` unless the run config says otherwise. For GECL/orchestration audit troubleshooting, use port `9227` with profile `C:\Users\chris\PROJECTS\chrome-automation-profile-gecl-test-9227`, or use `agora\scripts\gecl_full_credibility_submit_gate_review.py`.
 
 ---
 
@@ -797,7 +924,7 @@ The skill handles the `--phase` sequencing + inspector loop for you; direct invo
 | `--phase` | required | One of `phase1`, `phase1_5`, `phase2`, `phase3`, `phase4`, `phase5` |
 | `--prompt` | required for phase1 | Path to brief file. Stored in the ledger; later phases read from ledger |
 | `--resume` | required for all non-phase1 | Path to the ledger JSON |
-| `--preset` | `deep` | `fast` (instant/Fast/Sonnet 4.6), `standard` (latest/Pro/Opus), `deep` (thinking/Pro/Sonnet 4.6+extended-thinking) |
+| `--preset` | `deep` | `fast` (instant/Fast/Sonnet 4.6), `standard` (latest/Pro/Opus), `deep` (thinking-heavy/Pro/Sonnet 4.6+extended-thinking) |
 | `--model-chatgpt` / `--model-gemini` / `--model-claude` | preset | Override preset's per-engine choice |
 | `--no-extended-thinking` | off | Disable Claude extended thinking even if preset enables it |
 | `--only` | all | Restrict to specific engines (testing only; phase3/4 must be all 3; phase5 must be chatgpt only) |
@@ -806,7 +933,7 @@ The skill handles the `--phase` sequencing + inspector loop for you; direct invo
 | `--no-rate-limit` | off | Bypass browser_safety rate limiting (only when Christo authorizes a run) |
 
 **Preset notes:**
-- `deep` currently uses `gemini=Pro` (not Thinking) because the shared `ein_preflight.py` only recognises the `Pro` chip label. Thinking-as-Pro-subset is deferred. Claude still gets `extended_thinking=True` on deep, using Sonnet 4.6.
+- `deep` currently uses `chatgpt=thinking-heavy` and `gemini=Pro` (not Thinking) because the shared `ein_preflight.py` only recognises the `Pro` chip label. Thinking-as-Pro-subset is deferred. Claude still gets `extended_thinking=True` on deep, using Sonnet 4.6.
 
 **Examples:**
 ```bash
@@ -827,9 +954,11 @@ python ein-mdp.py --phase phase1 --prompt brief.txt --profile-suffix mdp --prese
 
 ### Ein Selenium — `ein-selenium.py`
 
+**Legacy/specialized only:** do not use this for ordinary ChatGPT consultation, ChatGPT Heavy, GECL authority reviews, orchestration/audit troubleshooting, file-upload consults, or "continue the ChatGPT discussion" requests. Those use persistent Chrome CDP (`start-chatgpt-persistent-cdp.ps1` + `chatgpt_persistent_cdp_client.py`) with the active run profile and port.
+
 **What it is:** The adversarial deliberation engine. Drives ChatGPT, Gemini, and Claude browsers directly via Selenium (no bridge processes needed). Each engine gets a contrarian lens and cross-examines the others. Best for truth-seeking and stress-testing hypotheses.
 
-**Difference from Ein MDP:** Ein Selenium is the underlying browser driver. Ein MDP wraps it with preflight checks, heartbeat monitoring, automatic retry logic, and a structured 5-phase protocol. For most deliberations, prefer Ein MDP. Use Ein Selenium directly when you want fine-grained phase control.
+**Difference from Ein MDP:** Ein Selenium is the underlying browser driver. Ein MDP wraps it with preflight checks, heartbeat monitoring, automatic retry logic, and a structured 5-phase protocol. For most deliberations, prefer Ein MDP. Use Ein Selenium directly only when the operator explicitly asks for that legacy engine and fine-grained phase control.
 
 **Command:**
 ```bash
@@ -850,7 +979,7 @@ python ein-selenium.py --phase 1 --only gemini
 |---|---|---|
 | `--phase` | `all` | `1`, `1.5`, `2`, `3`, `4`, or `all` |
 | `--only` | all | Restrict to specific engines: `chatgpt,gemini,claude` |
-| `--model-chatgpt` | `thinking` | ChatGPT model |
+| `--model-chatgpt` | `thinking-heavy` | ChatGPT model |
 | `--model-gemini` | `Pro` | Gemini model |
 | `--model-claude` | `Opus` | Claude model |
 | `--no-extended-thinking` | off | Disable Claude extended thinking |
@@ -1055,7 +1184,7 @@ qmd update && qmd embed
 | Mitso memory | `C:\Users\chris\PROJECTS\mitso\memories\` |
 | Shared tools/resources | `C:\Users\chris\PROJECTS\shared\` |
 | Tech library | `C:\Users\chris\PROJECTS\tech-library\` |
-| LightRAG backup | localhost:9621 (via /techlib skill) |
+| LightRAG backup | localhost:9621 (optional legacy backup; `/techlib` is QMD-backed) |
 
 **Tagging rule for Deus:** Every file saved starts with `[DEUS][IMMORTALITY]` on line one.
 

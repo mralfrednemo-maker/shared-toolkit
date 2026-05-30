@@ -1,0 +1,59 @@
+{
+    "notification":  {
+                         "repeat_alert_minutes":  120,
+                         "telegram_bridge":  "",
+                         "mode":  "None"
+                     },
+    "updated_at":  "2026-05-06T09:31:56.9005461+00:00",
+    "final_validation_command":  "exit 0",
+    "items":  [
+                  {
+                      "run_command":  "Set-Content -LiteralPath \u0027C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_closed_state_mar0\\should-not-run.txt\u0027 -Value \u0027ran\u0027",
+                      "id":  "ITEM-001",
+                      "check_command":  "exit 1",
+                      "recover_command":  "",
+                      "description":  "Already accepted externally.",
+                      "state_tracking":  {
+                                             "state_file":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_closed_state_mar0\\dialogue-state.json",
+                                             "status_path":  [
+                                                                 "items",
+                                                                 "ITEM-001",
+                                                                 "status"
+                                                             ],
+                                             "blocked_statuses":  [
+                                                                      "rejected",
+                                                                      "blocked_needs_human"
+                                                                  ],
+                                             "done_statuses":  [
+                                                                   "closed_accepted"
+                                                               ],
+                                             "enabled":  true
+                                         },
+                      "last_finished_at":  "2026-05-06T09:31:56.6085194+00:00",
+                      "evidence":  [
+                                       {
+                                           "state_file":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_closed_state_mar0\\dialogue-state.json",
+                                           "status":  "closed_accepted",
+                                           "type":  "external_state_terminal",
+                                           "ts":  "2026-05-06T09:31:56.6075203+00:00"
+                                       }
+                                   ],
+                      "attempts":  0,
+                      "status":  "done",
+                      "required":  true
+                  }
+              ],
+    "goal":  "Prove terminal state prevents duplicate recovery.",
+    "project_root":  "C:\\Users\\chris\\PROJECTS\\shared\\tmp-pytest-root\\pytest-shared-watchdog-patched\\test_external_closed_state_mar0",
+    "created_at":  "2026-05-06T09:31:56.5335720+00:00",
+    "supervisor":  {
+                       "state_file":  "supervisor-state.json",
+                       "max_retries_per_item":  3,
+                       "event_log":  "events.jsonl",
+                       "interval_seconds":  300
+                   },
+    "schema":  "durable-watchdog-backlog-v1",
+    "status":  "complete",
+    "completed_at":  "2026-05-06T09:31:56.8995461+00:00",
+    "project_name":  "External State Test"
+}

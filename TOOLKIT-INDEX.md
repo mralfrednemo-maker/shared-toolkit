@@ -23,7 +23,9 @@ Tool names in the first column MUST match a `### <name>` header in TOOLKIT.md (c
 | Firecrawl — MCP + CLI (`firecrawl_search`, `firecrawl_scrape`, etc.) | Search / scrape / crawl / extract / agent / interact | MCP tools `firecrawl_*`, CLI skills `firecrawl-*` |
 | Headless / Headful Browser — `mitso/browser-automation/` | Playwright Chromium profiles for authenticated scraping | `node mitso/browser-automation/setup-login.js` |
 | Generic Navigation — `mitso/browser-automation/navigate.js` | Full headful/headless website interaction — click, fill, scroll, extract, tabs, settings | `node mitso/browser-automation/navigate.js --url "..." --actions "click:#btn\|fill:#inp:val"` |
+| Live Browser Controller — `mitso/browser-automation/live-browser.js` | Best for logged-in settings/admin work with bot checks; visible persistent Playwright session | `node mitso/browser-automation/live-browser.js --profile-dir "profiles/site" --url "https://..." --port 9344` |
 | Headful Login Setup — `mitso/browser-automation/setup-nav.js` | One-time headful login for any site (cookies persist to shared profile) | `node mitso/browser-automation/setup-nav.js --url "https://..."` |
+| AFS Browser Automation | AtFirstSite/AFS authenticated browser automation; persistent Chrome + Playwright CDP | `C:\Users\chris\PROJECTS\afs_web_app\scripts\BROWSER-AUTOMATION.md` <!-- drift-ignore: project-specific runbook, not a TOOLKIT ### tool --> |
 
 ## LLM conversations (minutes)
 
@@ -85,7 +87,7 @@ Tool names in the first column MUST match a `### <name>` header in TOOLKIT.md (c
 | `/inbox` <!-- drift-ignore: skill --> | Read unread agent messages |
 | `/handover` <!-- drift-ignore: skill --> | Save session + write HANDOVER.md |
 | `/resumeintact` <!-- drift-ignore: skill --> | Reload prior session with full prompt history |
-| `/techlib` <!-- drift-ignore: skill --> | Save fix/decision to tech library + LightRAG |
+| `/techlib` <!-- drift-ignore: skill --> | Save fix/decision to QMD `techlib` via markdown in `tech-library/` |
 
 ## Hard rules (summary — full rules in TOOLKIT.md)
 

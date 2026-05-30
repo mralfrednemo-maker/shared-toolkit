@@ -14,6 +14,8 @@ Short version:
 
 > Use the shared durable watchdog template for unattended work. It is in `C:\Users\chris\PROJECTS\shared\watchdog-template`; search QMD for `durable watchdog template`.
 
+For implementation work, send the agent directly to `IMPLEMENTATION-GUIDE.md` in this directory. Search terms: `durable watchdog implementation guide`, `external monitor`, `agent heartbeat`, `watchdog launcher`, `recovery prompt`, `step-gate watchdog`, `orchestration watchdog`.
+
 ## What This Solves
 
 This pattern prevents the common failure where an agent promises to keep working but the chat turn ends, context compacts, or the agent is not re-invoked.
@@ -38,6 +40,10 @@ Every supervised project needs:
 
 - `backlog-template.json` - copy this into the project and fill in project-specific commands.
 - `supervisor-template.ps1` - generic backlog supervisor. It reads the backlog, starts pending work, checks running work, retries recovery, and stops only when all backlog items and final validation pass.
+- `external-monitor-template.ps1` - generic external owner. It restarts a missing supervisor, checks controller heartbeat freshness, and starts the configured wake command when the controller is stale.
+- `ralph-observer-template.ps1` - passive Ralph-style observer. It checks loop state, heartbeat freshness, Guru URL presence, and final status, then writes state/events. It never contacts Guru, launches Codex, wakes a session, edits product files, or becomes authority.
+- `install-external-monitor-scheduled-task.ps1` - registers a Windows Scheduled Task that runs the external monitor in one-shot mode on a fixed cadence.
+- `IMPLEMENTATION-GUIDE.md` - agent-facing implementation guide for creating project-specific watchdogs, launchers, external monitors, heartbeats, recovery prompts, progress updates, and step-gate watchdogs.
 - `examples/agora-room-supervision.md` - concrete mapping for Agora Code Audit Loop rooms.
 - `examples/sample-backlog.json` - runnable smoke-test backlog for proving the supervisor loop works.
 
@@ -147,6 +153,43 @@ Role/backend switch checklist:
 5. Require a handshake before unattended work resumes: the new worker must answer, write a fresh heartbeat with the expected `agent_role` and task id, and the supervisor must report that heartbeat as fresh.
 6. Record the switch in the event log or run notes with previous worker id, new worker id, backend/model command, time, and reason.
 
+## Passive Ralph Observer
+
+Use the passive Ralph observer when the user wants Ralph-like loop checking without allowing a second controller session.
+
+The observer reads configured durable evidence and writes only:
+
+- `ralph-observer-state.json`;
+- `ralph-observer-events.jsonl`.
+
+It is deliberately weaker than the external monitor:
+
+- it does not start the supervisor;
+- it does not run a wake command;
+- it does not contact Guru;
+- it does not launch Codex, Ralph, workers, browser automation, or Telegram relays;
+- it does not write authoritative dashboard, counter, Guru, or product state.
+
+Its statuses are:
+
+- `PASSIVE_OBSERVER_HEALTHY` - heartbeat and loop state are healthy;
+- `ACTION_REQUIRED: HEARTBEAT_STALE` - controller heartbeat is missing, invalid, stale, or blocked;
+- `ACTION_REQUIRED: LOOP_STATE_MISSING` - configured loop state is missing or invalid;
+- `ACTION_REQUIRED: LOOP_STATE_ACTION_REQUIRED` - configured loop state already reports action required;
+- `ACTION_REQUIRED: GURU_URL_MISSING` - configured counter file does not contain an active Guru URL;
+- `STOP_GURU_INTERACTION_FINAL_DELIVERY_RECORDED` - configured loop state reports final delivery status.
+
+Run one poll:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File C:\Users\chris\PROJECTS\shared\watchdog-template\ralph-observer-template.ps1 `
+  -BacklogPath C:\path\to\project\supervisor-backlog.json `
+  -Once
+```
+
+This observer can tell a human or the current hosted session that action is required. It cannot force a hosted chat thread to wake up. If a project needs autonomous restart or wake behavior, use an explicitly approved external monitor or restart harness instead.
+
 ## How To Use
 
 1. Copy `backlog-template.json` into the project, for example:
@@ -190,7 +233,19 @@ Role/backend switch checklist:
    - `supervisor-state.json`
    - the edited backlog JSON itself
 
-5. If the user wants routine status updates, enable `progress_updates` in the backlog:
+5. For unattended recovery, configure `external_monitor` in the backlog and register the scheduled external owner:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass `
+     -File C:\Users\chris\PROJECTS\shared\watchdog-template\install-external-monitor-scheduled-task.ps1 `
+     -BacklogPath C:\path\to\project\supervisor-backlog.json `
+     -TaskName "Project External Monitor" `
+     -IntervalMinutes 1
+   ```
+
+   The scheduled task runs through `wscript.exe //B` with a generated hidden launcher, which avoids recurring visible PowerShell pop-ups. The launcher runs `external-monitor-template.ps1 -Once`. The monitor starts the supervisor if its lock PID is missing, checks the configured controller heartbeat, and runs `controller_wake_command` only when the heartbeat is missing, invalid, stale, or blocked and the wake cooldown has elapsed. Wake attempts write `external-monitor-wake.log` and `external-monitor-wake-state.json` by default so the next poll can show whether the wake command started, exited, and with what exit code.
+
+6. If the user wants routine status updates, enable `progress_updates` in the backlog:
 
    ```json
    "progress_updates": {
@@ -222,6 +277,13 @@ This prevents a manual "show me status" probe from causing the real unattended s
 Before claiming unattended supervision works, verify:
 
 - supervisor process PID exists;
+- external monitor process or scheduled task exists;
+- scheduled task uses the hidden `wscript.exe //B` launcher unless the user explicitly wants a visible terminal;
+- external monitor can restart a missing supervisor;
+- passive Ralph observer can report healthy, action-required, and final states without taking control;
+- stale controller heartbeat runs the configured wake command;
+- wake attempts write a log and machine-readable wake-state file with exit code;
+- fresh controller heartbeat suppresses duplicate wake commands;
 - duplicate launch protection works through the `.lock.json` file;
 - one-shot status probes do not replace or supersede the durable supervisor owner;
 - event log receives fresh `poll` events;

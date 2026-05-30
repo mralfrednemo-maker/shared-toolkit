@@ -1,0 +1,6 @@
+{"status":"running","event":"poll","ts":"2026-05-06T09:31:57.9664049+00:00"}
+{"ts":"2026-05-06T09:31:58.7104990+00:00","event":"progress_sent","text":"periodic only"}
+{"ts":"2026-05-06T09:31:58.7571655+00:00","status":"closed_accepted","item_id":"ITEM-001","event":"external_state_applied","action":"done"}
+{"action":"done","text":"Immediate Terminal Test: item ITEM-001 reached external terminal state closed_accepted (done). Supervisor will not relaunch duplicate work for this item.","ts":"2026-05-06T09:31:58.7697871+00:00","event":"external_terminal_progress_sent","status":"closed_accepted","item_id":"ITEM-001"}
+{"output":"","ts":"2026-05-06T09:31:59.0234444+00:00","event":"final_validation","exit_code":0}
+{"event":"supervisor_complete","ts":"2026-05-06T09:31:59.0284465+00:00"}

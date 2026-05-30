@@ -22,12 +22,13 @@
   4. Never delegate orchestrator/integration wiring to agents with summarized prompts — the entity writing the integration must hold the full spec
   Passing tests and successful runs are NOT verification. They prove parts work in isolation. They do not prove the system matches the spec. See [full playbook](../projects/C--Users-chris-PROJECTS/memory/feedback_implementation_verification_playbook.md).
 
-## Unified Memory (LightRAG)
-- LightRAG Docker service at `http://localhost:9621` — vector + knowledge graph, replaces both tech-library and mitso-memory
-- **When the user says "check the tech library", "search the library", "have we seen this before", or any memory/knowledge search** → use the `lightrag-query` skill
-- **When troubleshooting infrastructure issues** → proactively use `lightrag-query` to search for past solutions before proposing fixes
-- **After resolving significant issues** → use the `lightrag-upload` skill to save the solution
-- **After saving a file to `tech-library/`** → also use `lightrag-upload` to index it into the graph
+## Unified Memory (QMD)
+- QMD is the single canonical memory/search system.
+- `/techlib` saves markdown under `C:\Users\chris\PROJECTS\tech-library\` and then refreshes QMD's `techlib` collection.
+- **When the user says "check the tech library", "search the library", "have we seen this before", or any memory/knowledge search** → use QMD, preferably `qmd query "..." -c techlib` or `node C:\Users\chris\PROJECTS\qmd-wrap.mjs query "..." -c techlib`.
+- **After resolving significant issues** → save via `/techlib`.
+- **After saving a file to `tech-library/`** → run `qmd update techlib` and `qmd embed techlib`, or use `node C:\Users\chris\PROJECTS\qmd-wrap.mjs update techlib` plus `embed techlib`.
+- LightRAG Docker service at `http://localhost:9621` remains optional legacy graph backup only; use `lightrag-*` skills only when explicitly requested.
 - Skills: `lightrag-query`, `lightrag-upload`, `lightrag-status`, `lightrag-explore`, `lightrag-save-session`
 - Web UI: `http://localhost:9621` | Swagger: `http://localhost:9621/docs`
 - **Recovery** (LightRAG unreachable): `cd C:\Users\chris\PROJECTS\LightRAG && wsl docker compose up -d`
